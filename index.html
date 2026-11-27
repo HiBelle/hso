@@ -115,6 +115,20 @@
       margin-bottom: 16px;
       box-shadow: var(--shadow);
     }
+    .alert-banner {
+      background: rgba(217, 119, 6, 0.12);
+      border: 1px solid var(--accent-gold);
+      border-radius: 12px;
+      padding: 12px 16px;
+      margin-bottom: 16px;
+      display: none;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+      font-size: 0.9rem;
+    }
+    .alert-banner.show { display: flex; }
     .controls-grid {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(175px, 1fr));
@@ -282,6 +296,27 @@
       padding: 20px;
       border: 1px solid var(--border);
     }
+    .tab-bar {
+      display: flex;
+      gap: 8px;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 10px;
+      margin-bottom: 14px;
+    }
+    .tab-btn {
+      padding: 6px 12px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: var(--bg-primary);
+      color: var(--text-main);
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .tab-btn.active {
+      background: var(--accent);
+      color: #fff;
+      border-color: var(--accent);
+    }
     .bottom-bar {
       position: fixed;
       bottom: 0;
@@ -318,16 +353,28 @@
   <header>
     <div class="brand">
       <span>🛡️ 警大二技行政組刷題</span>
-      <span class="badge-gold">115 最新釋疑版</span>
+      <span class="badge-gold" id="sourceBadge">CSV 題庫分離版</span>
     </div>
     <div class="header-actions">
       <button class="btn btn-ghost-light" onclick="toggleTheme()" title="切換深淺色">🌓</button>
-      <button class="btn btn-ghost-light desktop-only" onclick="openModal('importModal')">⚙️ 匯入題庫</button>
+      <button class="btn btn-ghost-light desktop-only" onclick="openModal('importModal')">⚙️ CSV 題庫管理</button>
       <button class="btn btn-gold" onclick="openModal('pwaModal')">📲 手機APP</button>
     </div>
   </header>
 
   <div class="container">
+    <!-- 若在本機直接雙擊開啟 file:// 無法自動 fetch CSV 時顯示手動載入提示 -->
+    <div class="alert-banner" id="localCsvBanner">
+      <div>
+        <strong>📂 尚未偵測到同目錄的 <code>questions.csv</code></strong><br>
+        <span style="font-size:0.82rem;color:var(--text-muted);">若您是在電腦本機直接點開 HTML 檔，請手動選擇 <code>questions.csv</code> 載入題庫（上傳至 GitHub Pages 後會自動讀取）。</span>
+      </div>
+      <div>
+        <button class="btn btn-gold" onclick="document.getElementById('quickCsvInput').click()">📂 選擇 questions.csv</button>
+        <input type="file" id="quickCsvInput" accept=".csv" style="display:none;" onchange="handleCsvUpload(event, true)" />
+      </div>
+    </div>
+
     <div class="stats-bar">
       <div class="stat-box">
         <div class="stat-val" id="statTotal">0</div>
@@ -342,7 +389,7 @@
         <div class="stat-lbl">錯題本累計</div>
       </div>
       <div class="stat-box">
-        <div class="stat-val" id="timerDisplay">80:00</div>
+        <div class="stat-val" id="timerDisplay">自由練習</div>
         <div class="stat-lbl">模擬考倒數</div>
       </div>
     </div>
@@ -352,17 +399,16 @@
         <div>
           <label>選擇年度</label>
           <select id="filterYear" onchange="applyFilter()">
-            <option value="115">115 學年度（最新完整版）</option>
-            <option value="ALL">全部已載入年度</option>
+            <option value="ALL">載入中...</option>
           </select>
         </div>
         <div>
           <label>選擇科目（行政組四科）</label>
           <select id="filterSubject" onchange="applyFilter()">
-            <option value="警察法規">警察法規（40題）</option>
-            <option value="警察勤務">警察勤務（40題）</option>
-            <option value="國文與憲法">國文與憲法（40題）</option>
-            <option value="英文">英文（40題）</option>
+            <option value="警察法規">警察法規</option>
+            <option value="警察勤務">警察勤務</option>
+            <option value="國文與憲法">國文與憲法</option>
+            <option value="英文">英文</option>
           </select>
         </div>
         <div>
@@ -377,8 +423,9 @@
           <button class="btn btn-primary" style="width:100%;justify-content:center;" onclick="resetSession()">🔄 重新作答本卷</button>
         </div>
       </div>
-      <div style="font-size:0.8rem;color:var(--text-muted);">
-        計分規則：第1～20題單選（對 +2 / 錯 -0.67 / 空 0）；第21～40題多選（每選項對 +0.6 / 錯 -0.6 / 全空 0）。
+      <div style="font-size:0.8rem;color:var(--text-muted);display:flex;justify-content:space-between;flex-wrap:wrap;gap:6px;">
+        <span>計分規則：第1～20題單選（對 +2 / 錯 -0.67 / 空 0）；第21～40題多選（每選項對 +0.6 / 錯 -0.6 / 全空 0）。</span>
+        <span id="bankStatusText" style="font-weight:600;color:var(--accent);"></span>
       </div>
     </div>
 
@@ -386,15 +433,15 @@
       <div class="question-header">
         <div>
           <span class="q-tag" id="qTypeBadge">單一選擇題</span>
-          <strong style="margin-left:8px;" id="qNumberLabel">第 1 題 / 共 40 題</strong>
+          <strong style="margin-left:8px;" id="qNumberLabel">載入中...</strong>
         </div>
         <div style="display:flex;gap:6px;">
-          <button class="btn" id="btnToggleWrong" onclick="toggleManualWrong()">⭐ 收藏錯題</button>
+          <button class="btn" id="btnToggleWrong" onclick="toggleManualWrong()">☆ 加入錯題本</button>
         </div>
       </div>
 
       <div id="passageContainer" class="passage-box" style="display:none;"></div>
-      <div class="q-stem" id="qStem">載入題目中...</div>
+      <div class="q-stem" id="qStem">正在讀取 questions.csv 題庫...</div>
       <div id="optionsContainer"></div>
 
       <div id="feedbackBox" class="feedback-box">
@@ -428,7 +475,7 @@
     <button class="active" onclick="setModeQuick('practice')">📝<span>刷題練習</span></button>
     <button onclick="setModeQuick('exam')">⏱️<span>擬真考試</span></button>
     <button onclick="setModeQuick('wrong')">📕<span>錯題本</span></button>
-    <button onclick="openModal('importModal')">➕<span>匯入題庫</span></button>
+    <button onclick="openModal('importModal')">📂<span>CSV題庫</span></button>
     <button onclick="openModal('pwaModal')">📲<span>裝成APP</span></button>
   </nav>
 
@@ -439,7 +486,7 @@
         <h3 style="margin:0;">📲 安裝到手機主畫面（類原生 APP）</h3>
         <button class="btn" onclick="closeModal('pwaModal')">✕</button>
       </div>
-      <p style="font-size:0.9rem;">本系統已內嵌警徽圖示與全螢幕設定。上傳至 GitHub Pages 後，開啟您的專屬網址即可一鍵安裝：</p>
+      <p style="font-size:0.9rem;">請確認您的 GitHub 儲存庫最外層同時放有 <code>index.html</code> 與 <code>questions.csv</code>，開啟網址即可安裝成桌面 APP：</p>
       <div style="background:var(--bg-primary);padding:12px;border-radius:10px;margin-bottom:12px;font-size:0.88rem;">
         <strong>🍎 iPhone (Safari)：</strong><br>
         開啟網址 → 點擊底部「分享」按鈕 → 選擇「加入主畫面」→ 點擊「新增」。<br><br>
@@ -447,7 +494,7 @@
         開啟網址 → 點擊右上角「⋮」選單 → 選擇「加到主畫面」或「安裝應用程式」。
       </div>
       <div style="display:flex;gap:10px;flex-wrap:wrap;">
-        <button class="btn btn-primary" onclick="downloadStandaloneHTML()">⬇️ 下載完整單檔版 index.html</button>
+        <button class="btn btn-primary" onclick="exportAllToCSV()">📤 匯出完整題庫 questions.csv</button>
         <button class="btn" onclick="exportProgress()">💾 備份錯題與筆記 (JSON)</button>
         <button class="btn" onclick="document.getElementById('progressFile').click()">📂 還原備份</button>
         <input type="file" id="progressFile" accept=".json" style="display:none;" onchange="importProgress(event)" />
@@ -455,211 +502,67 @@
     </div>
   </div>
 
-  <!-- PDF 文字自動匯入解析器 -->
+  <!-- CSV 題庫管理與匯入視窗 -->
   <div class="modal-backdrop" id="importModal">
     <div class="modal">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
-        <h3 style="margin:0;">⚙️ 匯入 111～114 學年度 PDF 題庫</h3>
+        <h3 style="margin:0;">⚙️ CSV 題庫管理（題庫與畫面分離）</h3>
         <button class="btn" onclick="closeModal('importModal')">✕</button>
       </div>
-      <div class="controls-grid">
-        <div>
-          <label>學年度</label>
-          <input type="text" id="impYear" value="114" placeholder="例如：114" />
+
+      <div class="tab-bar">
+        <button class="tab-btn active" id="tabBtnCsv" onclick="switchImportTab('csv')">📊 匯入 / 匯出 CSV 檔</button>
+        <button class="tab-btn" id="tabBtnPdf" onclick="switchImportTab('pdf')">📄 貼上 PDF 文字轉 CSV</button>
+      </div>
+
+      <!-- Tab 1: CSV 檔案操作 -->
+      <div id="tabPanelCsv">
+        <p style="font-size:0.88rem;color:var(--text-muted);margin-top:0;">
+          CSV 欄位格式：<code>id,year,subject,num,type,passage,stem,optA,optB,optC,optD,optE,ans</code>（可用 Excel 直接開啟編輯，存檔時請選 UTF-8 CSV）。
+        </p>
+        <div style="background:var(--bg-primary);padding:14px;border-radius:10px;margin-bottom:12px;">
+          <label>選擇要匯入的 .csv 題庫檔（會自動合併並儲存於瀏覽器）：</label>
+          <input type="file" id="csvFileInput" accept=".csv" onchange="handleCsvUpload(event, false)" />
         </div>
-        <div>
-          <label>科目名稱</label>
-          <select id="impSubject">
-            <option value="警察法規">警察法規</option>
-            <option value="警察勤務">警察勤務</option>
-            <option value="國文與憲法">國文與憲法</option>
-            <option value="英文">英文</option>
-          </select>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;">
+          <button class="btn btn-primary" onclick="exportAllToCSV()">📤 匯出目前全部題庫為 questions.csv</button>
+          <button class="btn" onclick="downloadCsvTemplate()">📥 下載空白 CSV 題庫範本</button>
+          <button class="btn btn-danger" onclick="clearCustomBank()">🗑️ 清除瀏覽器快取題庫</button>
         </div>
       </div>
-      <label>1. 貼上試題 PDF 全文（含題號與 (A)(B)(C)(D)(E) 選項）：</label>
-      <textarea id="impQuestionsText" rows="5" placeholder="直接從 PDF 全選複製貼上到此處..."></textarea>
-      <label style="margin-top:10px;">2. 貼上該科解答（支援空白分隔或換行，如：1 B 2 C ... 21 ABCE）：</label>
-      <textarea id="impAnswersText" rows="3" placeholder="例如：1 B 2 C 3 C ... 或直接複製解答表貼上"></textarea>
-      <div style="margin-top:12px;display:flex;gap:10px;">
-        <button class="btn btn-primary" onclick="parseAndImport()">🚀 解析並加入題庫</button>
-        <button class="btn btn-danger" onclick="clearCustomBank()">🗑️ 清除自訂匯入題目</button>
+
+      <!-- Tab 2: PDF 文字轉 CSV -->
+      <div id="tabPanelPdf" style="display:none;">
+        <div class="controls-grid">
+          <div>
+            <label>學年度</label>
+            <input type="text" id="impYear" value="114" placeholder="例如：114" />
+          </div>
+          <div>
+            <label>科目名稱</label>
+            <select id="impSubject">
+              <option value="警察法規">警察法規</option>
+              <option value="警察勤務">警察勤務</option>
+              <option value="國文與憲法">國文與憲法</option>
+              <option value="英文">英文</option>
+            </select>
+          </div>
+        </div>
+        <label>1. 貼上試題 PDF 全文（含題號與 (A)(B)(C)(D)(E) 選項）：</label>
+        <textarea id="impQuestionsText" rows="4" placeholder="直接從 PDF 全選複製貼上到此處..."></textarea>
+        <label style="margin-top:8px;">2. 貼上該科解答（如：1 B 2 C ... 21 ABCE）：</label>
+        <textarea id="impAnswersText" rows="2" placeholder="例如：1 B 2 C 3 C ... 或直接複製解答表貼上"></textarea>
+        <div style="margin-top:12px;display:flex;gap:10px;flex-wrap:wrap;">
+          <button class="btn btn-primary" onclick="parsePdfAndAdd()">🚀 解析並加入題庫</button>
+          <button class="btn btn-gold" onclick="parsePdfAndDownloadCsv()">⬇️ 直接轉存成 CSV 檔</button>
+        </div>
       </div>
     </div>
   </div>
 
 <script>
-// 內建 115 學年度行政組完整 160 題（含 1150518 釋疑修正版解答）
-const BUILTIN_QUESTIONS = [
-  // ==================== 115 警察法規 (1-40) ====================
-  {id:"115-law-1",year:"115",subject:"警察法規",num:1,type:"single",stem:"有關違反通訊傳播法令案件之偵查，由下列何者掌理？",options:{A:"內政部警政署保安警察第二總隊",B:"內政部警政署刑事警察局",C:"行政院數位發展部",D:"國家通訊傳播委員會"},ans:"B"},
-  {id:"115-law-2",year:"115",subject:"警察法規",num:2,type:"single",stem:"檢察官與司法警察機關職務之執行，應密切聯繫；其辦法由下列何者定之？",options:{A:"內政部會同法務部",B:"立法院",C:"行政院會同司法院",D:"行政院"},ans:"D"},
-  {id:"115-law-3",year:"115",subject:"警察法規",num:3,type:"single",stem:"人民與警察機關間，因公法上原因請求作成行政處分以外之其他非財產上之給付，得提起下列何種訴訟？",options:{A:"特別給付訴訟",B:"課予義務訴訟",C:"給付訴訟",D:"確認訴訟"},ans:"C"},
-  {id:"115-law-4",year:"115",subject:"警察法規",num:4,type:"single",stem:"下列對警察行使職權之請求損失補償敘述，何者錯誤？",options:{A:"人民若非受特別犧牲，即使於警察行使職權時受有損失，亦不得請求補償",B:"損失補償必須超過其應盡之社會義務範圍，使應就其個別所遭受之特別損失或特別犧牲，酌予公平合理之補償",C:"警察基於公益，合法實施警察職權，致人民財產遭受損失，雖在人民社會義務範圍內，亦得請求補償",D:"行政法上之損失補償，乃行政機關基於公益之目的適法的實施行政權所為之補償，與國家賠償係對於違法之侵害者不同"},ans:"C"},
-  {id:"115-law-5",year:"115",subject:"警察法規",num:5,type:"single",stem:"某日甲為表達其抗議農業部某特定政策之政治主張，而到農業部大樓為陳抗行為。此言論表達，屬學理上所稱之何種言論？",options:{A:"象徵性言論",B:"爭議性言論",C:"公共性言論",D:"政策性言論"},ans:"A"},
-  {id:"115-law-6",year:"115",subject:"警察法規",num:6,type:"single",stem:"公共場所或公眾得出入之場所舉行會議、演說或其他聚眾活動。稱為：",options:{A:"聚眾",B:"陳情",C:"集會",D:"陳抗"},ans:"C"},
-  {id:"115-law-7",year:"115",subject:"警察法規",num:7,type:"single",stem:"對室外集會、遊行不許可、撤銷或變更許可之通知書，應審慎詳核敘明理由，並迅速、確實依限送達，不得逾期。如逾期其法律效果：",options:{A:"即視為不許可",B:"即推定為不許可",C:"即推定為許可",D:"即視為許可"},ans:"D"},
-  {id:"115-law-8",year:"115",subject:"警察法規",num:8,type:"single",stem:"因事起倉卒，且非即刻舉行無法達其目的之集會、遊行。稱為：",options:{A:"偶發性集會、遊行",B:"緊急性集會、遊行",C:"即時性集會、遊行",D:"特殊性集會、遊行"},ans:"B"},
-  {id:"115-law-9",year:"115",subject:"警察法規",num:9,type:"single",stem:"下列何者並非警察機關配備警械種類之一？",options:{A:"木質警棍",B:"辣椒水",C:"警銬",D:"瓦斯噴霧器"},ans:"B"},
-  {id:"115-law-10",year:"115",subject:"警察法規",num:10,type:"single",stem:"依規定警察人員使用防護型噴霧器時，應注意事項不包括下列何者？",options:{A:"考量所犯罪名輕重與拘捕時之態度",B:"考量地形及地物之狀況，避免造成相對人其他傷害",C:"應注意風向及其他足以影響他人之情事",D:"於制止或施用警銬逮捕相對人後，避免其臉部接觸地面影響呼吸"},ans:"A"},
-  {id:"115-law-11",year:"115",subject:"警察法規",num:11,type:"single",stem:"依據《警械許可定製售賣持有管理辦法》規定，得申請許可定製、售賣、持有之警械以警棍、警銬、電氣警棍（棒）（電擊器）及下列何者為限？",options:{A:"瓦斯槍",B:"瓦斯噴霧器（罐）",C:"警繩",D:"防暴網"},ans:"D"},
-  {id:"115-law-12",year:"115",subject:"警察法規",num:12,type:"single",stem:"警察使用警械之損失補償，其法理基礎乃國家為達成公益，而對特定人民之憲法上權利，加諸超越社會一般容忍程度的侵害，這些侵害之於所有人均應忍受之義務，係屬特別之犧牲，基於下列何種原則，即應對權利受到特別犧牲者提供補償？",options:{A:"誠信原則",B:"信賴保護原則",C:"平等原則",D:"適當性原則"},ans:"C"},
-  {id:"115-law-13",year:"115",subject:"警察法規",num:13,type:"single",stem:"《警察法施行細則》第 2 條明定「依法」促進人民福利為警察之輔助任務，請問警察執行此項輔助任務的主要法律依據為何？",options:{A:"依據《社會福利基本法》相關社會福利政策之規定辦理",B:"依據《行政程序法》相關職務協助之規定辦理",C:"依據《地方制度法》相關社會服務事項之規定辦理",D:"依據《警察職權行使法》相關保障人民權益之規定辦理"},ans:"B"},
-  {id:"115-law-14",year:"115",subject:"警察法規",num:14,type:"single",stem:"內政部警政署保安警察第二總隊，依法兼受下列何機關指揮監督？",options:{A:"財政部",B:"經濟部",C:"法務部",D:"農業部"},ans:"B"},
-  {id:"115-law-15",year:"115",subject:"警察法規",num:15,type:"single",stem:"依據《社會秩序維護法》第 67 條第 2 項之規定，若行為人甲之配偶乙違反該法相關規定時，甲竟基於圖利乙之意圖而於警察機關依法調查時為虛偽之證言，有關甲之法律效果，下列敘述何者正確？",options:{A:"應處以申誡或免除其處罰",B:"應減輕其處罰至本罰之二分之一",C:"應處 3 日以下拘留或新臺幣 1 萬 2,000 元以下罰鍰",D:"應以涉犯《刑法》第 168 條之偽證罪嫌，移送檢察機關依法辦理"},ans:"A"},
-  {id:"115-law-16",year:"115",subject:"警察法規",num:16,type:"single",stem:"依據司法院大法官釋字第 808 號解釋意旨，有關《社會秩序維護法》與刑事法律相牽連案件之管轄與適用，下列何者正確？",options:{A:"同一行為已受刑事處罰者，仍得依《社會秩序維護法》裁處「拘留」",B:"同一行為已受刑事處罰者，仍得依《社會秩序維護法》裁處「停止營業」",C:"同一行為已受刑事處罰者，仍得依《社會秩序維護法》裁處「罰鍰」",D:"同一行為已受刑事處罰者，即不得再依《社會秩序維護法》進行裁處"},ans:"B"},
-  {id:"115-law-17",year:"115",subject:"警察法規",num:17,type:"single",stem:"依據《社會秩序維護法》與《違反社會秩序維護法案件處理辦法》之規定，有關警察機關對違反該法案件之處分權限，下列敘述何者正確？",options:{A:"警察機關若查獲查禁物而需宣告「沒入」，應即移送簡易庭裁定",B:"警察機關查獲行為人無正當理由攜帶具有殺傷力之器械時，即可依法作成處分書",C:"警察機關對於情節輕微且事實明確違反《社會秩序維護法》之案件時，均得不經通知、訊問逕行處分",D:"違反《社會秩序維護法》之案件，經該管簡易庭裁定拘留確定者，應由原移送之警察機關依法執行之"},ans:"D"},
-  {id:"115-law-18",year:"115",subject:"警察法規",num:18,type:"single",stem:"依據《集會遊行法》之規定，有關申請集會遊行之負責人不服主管機關所為不予許可之救濟程序，下列敘述何者正確？",options:{A:"負責人應於收受不予許可通知書之日起 3 日內提出申復",B:"原主管機關認為申復無理由者，應於收受申復書之日起 3 日內，連同卷證檢送其上級警察機關",C:"上級警察機關應於收受申復書等卷證之日起 3 日內決定，並以書面通知負責人",D:"負責人依據《集會遊行法》提出申復之救濟程序後，原不予許可通知書仍具效力"},ans:"D"},
-  {id:"115-law-19",year:"115",subject:"警察法規",num:19,type:"single",stem:"下列各相關警察法規，何者屬於行政規則之性質？",options:{A:"沒入物品處分規則",B:"警察人員使用槍械規範",C:"治安顧慮人口查訪辦法",D:"警械許可定製售賣持有管理辦法"},ans:"B"},
-  {id:"115-law-20",year:"115",subject:"警察法規",num:20,type:"single",stem:"依據《警察職權行使法》之規定，有關警察以目視或科技工具長期觀察及掌握動態等資料蒐集活動之敘述，下列何者正確？（1150518釋疑決議：B或D均給分）",options:{A:"應事先取得警察分局長之書面同意",B:"須有事實足認其有參與職業性犯罪之虞者",C:"蒐集之期間每次不得逾二年",D:"蒐集之資料，於達成目的後，除為調查犯罪行為而有保存之必要者外，應即銷毀之"},ans:"B|D"},
-  {id:"115-law-21",year:"115",subject:"警察法規",num:21,type:"multi",stem:"下列何者屬由內政部警政署辦理之事項？",options:{A:"協助偵查犯罪、涉外治安處理、國際警察合作及跨國犯罪案件協助查緝之規劃、執行",B:"社會治安情報之諮詢布置、蒐集、傳遞、運用與刑案及治安狀況之通報、管制、指揮、協調、聯繫",C:"警衛安全、拱衛中樞、準備應變及重大、緊急案件處理之規劃、執行",D:"預防與偵查犯罪、防制組織及經濟犯罪、司法警察、通訊監察業務工作之規劃、執行、督導、考核",E:"警察官制、官規、教育、服制、勤務、後勤制度、警察職權行使及其他警察法制之規劃、執行"},ans:"ACE"},
-  {id:"115-law-22",year:"115",subject:"警察法規",num:22,type:"multi",stem:"有關內政部警政署之次級機關中之各保安警察總隊業務，包括下列何者？",options:{A:"執行治安及安全維護事項",B:"執行警戒、警衛",C:"鐵路沿線及旅客貨運安全維護",D:"違反通訊傳播法令之偵查、取締",E:"執行保安、警備"},ans:"ABE"},
-  {id:"115-law-23",year:"115",subject:"警察法規",num:23,type:"multi",stem:"依據「警察分駐所派出所設置基準」之規定，對警察分駐所、派出所之設置，得重新評估，規劃調整設置之情形，其原因包括下列何者？",options:{A:"交通狀況複雜，難以全盤掌控者",B:"轄區各類案件有增加者",C:"行政區域鄰里調整者",D:"因應轄區發展趨勢，認有必要者",E:"警勤區數眾多且轄區工作繁重，顯難有效督導管理者"},ans:"ADE"},
-  {id:"115-law-24",year:"115",subject:"警察法規",num:24,type:"multi",stem:"下列對「於公務員依法執行職務時，以顯然不當之言詞或行動相加，尚未達強暴脅迫或侮辱之程度者」之敘述，何者正確？",options:{A:"如情節重大，已達強暴脅迫之程度者，應依《社會秩序維護法》加重處罰",B:"其法定罰處拘留或新臺幣 1 萬 2 千元以下罰鍰",C:"為《社會秩序維護法》第 85 條第 1 款之規定",D:"該顯然不當之言詞如已達侮辱之程度，係觸犯《刑法》第 140 條之侮辱公務員罪",E:"所謂「顯然不當之言詞或行動」，在認定上屬行政裁量"},ans:"BCD"},
-  {id:"115-law-25",year:"115",subject:"警察法規",num:25,type:"multi",stem:"警察依法查證人民身分，於符合下列何種情形，得檢查該人民之身體及所攜帶之物？",options:{A:"有明顯事實足認其對已發生之犯罪知情者",B:"有明顯事實足認其有攜帶傷害他人生命之物者",C:"有明顯事實足認其行蹤可疑者",D:"有明顯事實足認其有攜帶足以自傷之物者",E:"有明顯事實足認其有攜帶足以自殺之物者"},ans:"BDE"},
-  {id:"115-law-26",year:"115",subject:"警察法規",num:26,type:"multi",stem:"下列對違反《社會秩序維護法》案件處罰執行之敘述，何者正確？",options:{A:"裁定拘留確定，經通知執行，無正當理由不到場者，申請拘票執行到場",B:"拘留之執行，翌日起算，並以二十四小時為一日",C:"罰鍰逾期未完納者，由警察機關依法移送行政執行",D:"拘留，應在拘留所內執行之",E:"違反《社會秩序維護法》案件之處罰，於裁處確定後執行"},ans:"CDE"},
-  {id:"115-law-27",year:"115",subject:"警察法規",num:27,type:"multi",stem:"依據司法院大法官釋字第 718 號解釋理由書，《憲法》第 14 條規定人民有集會之自由，其目的包括下列何者？",options:{A:"保障人民有隨時任意前往他方或停留一定處所之行動自由",B:"藉此並可影響、監督政策或法律之制定",C:"其為實施民主政治以促進思辯、尊重差異，實現憲法兼容並蓄精神之重要基本人權",D:"保障人民以集體行動之方式及非和平的表達意見",E:"可與社會各界進行溝通對話，以形成或改變公共意見"},ans:"BCE"},
-  {id:"115-law-28",year:"115",subject:"警察法規",num:28,type:"multi",stem:"偶發性之集會、遊行，無須申請許可，須符合下列何種情形？",options:{A:"聚集舉行集會、遊行前，事實上無發起人或負責人",B:"聚集舉行集會、遊行前，具有特殊原因",C:"因特殊原因而自發性聚集，事實上未經召集",D:"擬規劃聚集舉行集會、遊行，具有政治原因",E:"因事起倉卒，且非即刻舉行無法達其目的之集會、遊行"},ans:"ABC"},
-  {id:"115-law-29",year:"115",subject:"警察法規",num:29,type:"multi",stem:"警察人員依據《警械使用條例》之規定使用警械，致第三人之下列何種法益遭受損失時，該第三人得請求補償？",options:{A:"公權",B:"財產",C:"身體",D:"生命",E:"自由"},ans:"BCD"},
-  {id:"115-law-30",year:"115",subject:"警察法規",num:30,type:"multi",stem:"警察甲依據《警察職權行使法》第 6 條、第 7 條之規定，依法對民眾乙實施盤查時，惟乙當場拒絕告知姓名及出示證件致顯然無法查證身分，甲決定將乙帶回勤務處所繼續查證，甲所應踐行之正當法律程序，下列敘述何者正確？",options:{A:"帶往時，非遇抗拒不得使用強制力，其時間自抵達勤務處所後，不得逾 3 小時",B:"帶往時，應即向警察分局長報告並通知其指定親友或律師",C:"帶至勤務處所後，若乙保持緘默致仍無法查明身分時，得違反其意願採取照相、測量身高或類似的非侵入性鑑識措施",D:"甲須以書面告知乙得依《提審法》之規定聲請法院提審，若未告知者，得科新臺幣 10 萬元以下罰金",E:"帶往途中，若民眾主動出示證件足以查證身份時，即應任其離去"},ans:"DE"},
-  {id:"115-law-31",year:"115",subject:"警察法規",num:31,type:"multi",stem:"依據司法院大法官釋字第 785 號解釋意旨，關於警察機關輪班、輪休相關制度、人員健康權保障及救濟途徑等事項，下列敘述何者正確？",options:{A:"警察機關因勤務具有全年無休性質，得不受健康權保障之限制，自行決定輪班制度",B:"警察人員因勤務安排所生之公法上爭議，得依爭議性質提起行政訴訟請求救濟",C:"警察勤務制度如未就服勤時間與休息安排，提供足以維護身心健康之制度設計，可能違反憲法保障",D:"警察勤務採行之輪班、輪休制度，係屬警察機關內部管理事項，得完全以行政規則定之，無須法律依據",E:"國家對警察人員之健康權負有最低限度之制度保障義務，勤務制度不得造成勤休失衡"},ans:"BCE"},
-  {id:"115-law-32",year:"115",subject:"警察法規",num:32,type:"multi",stem:"依據憲法法庭 111 年憲判字第 10 號判決意旨，關於警察人員依《警察人員人事條例》規定，累積二大過即予免職，與一般公務人員依《公務人員考績法》須於年終考績始可能免職之差別待遇，下列敘述何者正確？",options:{A:"兩制度免職時點不同，即屬違反憲法平等原則",B:"警察職務影響公共安全甚鉅，立法者得採較嚴格之免職制度，故不違憲",C:"警察人員採即時免職制度，係為汰除違紀失職人員，屬追求重要公益，尚不違憲",D:"兩制度涉及免職之差別待遇，係屬立法形成空間，尚難認有違憲之虞",E:"現行兩制度存有差別待遇，相關機關應於兩年內進行檢討修正"},ans:"BCD"},
-  {id:"115-law-33",year:"115",subject:"警察法規",num:33,type:"multi",stem:"依據憲法法庭 111 年憲判字第 1 號判決意旨及《道路交通管理處罰條例》對於「強制採血檢測」之規定，下列敘述何者正確？",options:{A:"憲法法庭認為強制採血涉及人身自由等權利之限制，應予以中度審查",B:"憲法法庭認為強制採血檢測之結果，應有確保資訊不受濫用之防護機制",C:"汽車駕駛人肇事且昏迷不醒時，司法警察官認有採血檢測之必要時，得先行移由醫療機構採檢，並應於實施後 24 小時內陳報檢察官許可",D:"司法警察官依法先行實施血液測試後陳報檢察官，若檢察官認為不應許可者，應於實施後二日內撤銷之",E:"受血液測試檢定者得於受血液測試檢定後十日內，聲請該管法院撤銷之"},ans:"BE"},
-  {id:"115-law-34",year:"115",subject:"警察法規",num:34,type:"multi",stem:"依據最高行政法院 111 年度上字第 675 號判決意旨，關於《警察職權行使法》（下稱警職法）之規範與實務適用，下列敘述何者正確？",options:{A:"警職法第 8 條所稱「異常舉動」，僅限於駕駛人客觀可見之肢體動作，不包括車內散發異常氣味等交通工具呈現之狀態",B:"警職法第 8 條之「強制離車」不以物理強制力為限，凡駕駛人受命離車且負有容忍義務而自行下車者，亦屬之",C:"警職法第 8 條所稱「有事實足認有犯罪之虞」之可信度要求，雖高於「合理懷疑」，但仍以客觀事實為基礎，依當下合理判斷具犯罪可能性即足",D:"依警職法第 6 條執行「集體性路檢」時，如因具體狀況已達「合理懷疑」或「有犯罪之虞」，應認已同時滿足同法第 8 條第 1 項「易生危害」之要件",E:"警察依警職法第 8 條實施「檢查交通工具」時，基於人身安全與事證保全之必要，得解為當然具有附隨採取「強制離車」措施之權限"},ans:"BCDE"},
-  {id:"115-law-35",year:"115",subject:"警察法規",num:35,type:"multi",stem:"下列對警察職務之遴任權限敘述，何者正確？",options:{A:"縣市政府所屬之警佐職務，由縣市政府遴任",B:"警正職務，由內政部遴任或交由直轄市政府遴任",C:"警佐職務，由內政部遴任或交由直轄市政府遴任",D:"警監職務，由總統遴任",E:"警監職務，由內政部遴任或報請行政院遴任"},ans:"BCE"},
-  {id:"115-law-36",year:"115",subject:"警察法規",num:36,type:"multi",stem:"關於《警察職權行使法》第 8 條之規定，警察對於已發生危害或依客觀合理判斷易生危害之交通工具予以攔停後，得採行之相關措施，下列敘述何者正確？",options:{A:"可查證駕駛者身分外並得要求同車乘客全部出示相關證件",B:"要求駕駛者接受「毒品唾液快篩試劑檢測」",C:"要求駕駛人接受酒精濃度測試之檢定",D:"駕駛者經測試檢定吐氣所含酒精濃度達每公升 0.25 毫克時，得要求同車乘客接受酒精濃度測試之檢定",E:"駕駛者有異常舉動而合理懷疑其將有危害行為時，得檢查交通工具"},ans:"AC"},
-  {id:"115-law-37",year:"115",subject:"警察法規",num:37,type:"multi",stem:"關於《社會秩序維護法》所規範之「時效」，下列敘述何者正確？",options:{A:"違反本法之行為，自行為成立之日起，逾三個月者，警察機關不得訊問、處罰，並不得移送法院",B:"違反本法之行為有連續或繼續之狀態者，自行為終了之日起算，逾二個月者，警察機關不得訊問、處罰，並不得移送法院。",C:"經核准分期繳納罰鍰而遲誤者，執行時效自其裁處確定之日起算，逾三個月未移送行政執行者，免予移送",D:"處罰停止營業者之執行時效，自裁處確定之日起，逾三個月未執行者，免予執行",E:"處罰勒令歇業者之執行時效，自裁處確定之日起，逾三個月未執行者，免予執行"},ans:"BD"},
-  {id:"115-law-38",year:"115",subject:"警察法規",num:38,type:"multi",stem:"關於《社會秩序維護法》所規範之「責任能力」，下列敘述何者正確？",options:{A:"未滿十四歲人之行為，不罰，但無人管教時，得送交少年或兒童福利機構收容",B:"十四歲以上未滿十八歲人，得減輕處罰，並強制責由其法定代理人或其他相當之人加以管教",C:"滿七十歲人之行為，得減輕處罰，並僅處以罰鍰或申誡為限",D:"精神耗弱者違反本法者，不罰，但無人監護或不能監護時，得送交療養處所監護或治療",E:"心神喪失人有違反本法之行為者，不罰，但得責由其監護人加以監護"},ans:"AE"},
-  {id:"115-law-39",year:"115",subject:"警察法規",num:39,type:"multi",stem:"依據《集會遊行法》之規定，有關集會、遊行禁制區週邊範圍之劃定及特許核准之事項，下列敘述何者正確？",options:{A:"國際機場之週邊範圍由交通部劃定公告，但不得逾 300 公尺",B:"總統府之週邊範圍由國防部劃定公告，但不得逾 300 公尺",C:"重要軍事設施地區之週邊範圍由國防部劃定公告，但不得逾 300 公尺",D:"各國駐華使領館之週邊範圍由外交部劃定公告，但不得逾 50 公尺",E:"職業工會依法宣布之罷工活動，雖無需向主管機關申請許可，但應依集會遊行法申請許可後，始能於已劃定禁制區範圍內舉行罷工集會、遊行"},ans:"CDE"},
-  {id:"115-law-40",year:"115",subject:"警察法規",num:40,type:"multi",stem:"依據《警械使用條例》之規定，有關警察人員使用槍械逕行射擊之要件，下列敘述何者正確？",options:{A:"於情況急迫且不即時制止將危及警察人員生命時",B:"行為人以致命性武器攻擊警察人員時",C:"行為人持兇器滋事時，經警察人員告誡拋棄仍不從時",D:"行為人意圖奪取警察人員配槍時",E:"行為人拒捕並有脫逃之虞時"},ans:"ABD"},
-
-  // ==================== 115 警察勤務 (1-40) ====================
-  {id:"115-duty-1",year:"115",subject:"警察勤務",num:1,type:"single",stem:"警察人員執行職務時，認犯罪嫌疑人或行為人有特定情形將危及警察或他人生命、身體時，得「使用槍械逕行射擊」。下列何種情形不符合逕行射擊之要件？",options:{A:"依法應逮捕、拘禁之人單純拒捕、脫逃時",B:"意圖奪取警察人員配槍或其他可能致人傷亡之裝備機具時",C:"有事實足認持有致命性武器或危險物品意圖攻擊警察人員或他人時",D:"以交通工具攻擊、挾持、脅迫警察人員或他人時"},ans:"A"},
-  {id:"115-duty-2",year:"115",subject:"警察勤務",num:2,type:"single",stem:"依據「協助取締違反菸害防制法作業程序」，警察人員於執勤中，發現兒童及少年抽菸行為，違反相關法規規定，應予勸導制止或為其他適當處理，並酌情採適當方式通知兒童及少年之父母、監護人或實際照顧之人加強管教，有學籍者，另通知教育行政主管機關由學校進行輔導。該相關法規，不包括下列何者？",options:{A:"少年事件處理法",B:"少年偏差行為預防及輔導辦法",C:"兒童及少年福利與權益保障法",D:"兒童及少年福利與權益保障法施行細則"},ans:"A"},
-  {id:"115-duty-3",year:"115",subject:"警察勤務",num:3,type:"single",stem:"依據「警察機關執勤使用微型攝影機及影音資料保存管理要點」規定，影音資料之保存，除法律另有規定或為維護第三人法律上權益而有保存之必要者外，一般應保存多久？",options:{A:"15 日",B:"1 個月",C:"2 個月",D:"6 個月"},ans:"B"},
-  {id:"115-duty-4",year:"115",subject:"警察勤務",num:4,type:"single",stem:"依據「警察處理動物保護法案件作業程序」，農業部設置動物保護專線，為下列何者號碼，各警察單位應與地方農政單位建立緊急聯絡窗口，俾利遇案聯繫？",options:{A:"1995",B:"1925",C:"1955",D:"1959"},ans:"D"},
-  {id:"115-duty-5",year:"115",subject:"警察勤務",num:5,type:"single",stem:"對於拒絕酒測已逮捕之準現行犯，若當事人仍堅持不配合實施吐氣檢測，後續應如何處理，始可強制抽血檢驗？",options:{A:"由勤務人員逕行將當事人送往醫院強制抽血",B:"報請法官核發搜索票後實施",C:"通報偵查隊，由偵查隊陳報檢察官依職權核發鑑定許可書",D:"取得醫療院所醫師開立之許可書後實施"},ans:"C"},
-  {id:"115-duty-6",year:"115",subject:"警察勤務",num:6,type:"single",stem:"依據「警察警勤區訪查作業規定」，對於諮詢對象須定期連續拜訪之人員，不包括下列哪一列舉之選項？",options:{A:"社區（大樓）保全（管理）人員",B:"其他熱心為民服務及維護地方治安之人",C:"守望相助隊人員",D:"機關（構）、團體、學校"},ans:"D"},
-  {id:"115-duty-7",year:"115",subject:"警察勤務",num:7,type:"single",stem:"依據「各級警察機關辦理勤務審核作業規定」，基本審核單位每月應召開一次勤務審核會議。關於基層員警代表增派的條件，下列何者正確？",options:{A:"一律僅能指派 2 名基層代表",B:"配置警力數達十人以上之外勤單位即可增派 1 名",C:"依實際服勤人數，一百人以下指派 2 名，配置警力數達二十一人以上之外勤單位，增派基層員警代表 1 名",D:"警力數超過五十人即可增派 2 名"},ans:"C"},
-  {id:"115-duty-8",year:"115",subject:"警察勤務",num:8,type:"single",stem:"英國前內政部長羅勃皮爾（Sir Robert Peel）爵士，1829 年在倫敦成立有組織的警察單位，執行街頭勤務，是現代警察的起源；由於現代警察制度的成功，其他國家也先後仿效。有關警察建立的文獻，下列何者正確？",options:{A:"1842 年美國紐約市成立警察局",B:"1838 年美國波士頓（Boston）成立警察局",C:"1854 年德國柏林成立警察局",D:"1846 年美國費城（Philadelphia）成立警察局"},ans:"B"},
-  {id:"115-duty-9",year:"115",subject:"警察勤務",num:9,type:"single",stem:"依據「警察機關執行勤務之警力數編配及應勤裝備攜行規定」，員警執行機車巡邏勤務時，關於防彈衣的穿著規定為何？（1150518釋疑決議：一律給分）",options:{A:"僅於夜間及深夜勤務時段需要穿著",B:"日勤由主管視治安狀況律定；夜勤及深夜勤時段，均應穿著",C:"無論日夜間均應著防彈衣",D:"均不需穿著，放置於機車置物箱內備用即可"},ans:"ALL"},
-  {id:"115-duty-10",year:"115",subject:"警察勤務",num:10,type:"single",stem:"執行場所臨檢勤務時，對獲准居留之外籍配偶，於營業場所內單純從事坐檯陪酒並收取費用員警應如何處理？",options:{A:"當場開立勸導單後放行",B:"將其強制驅離營業場所",C:"函請內政部移民署或其當地專勤隊依權責處理",D:"依《社會秩序維護法》逕行裁罰"},ans:"C"},
-  {id:"115-duty-11",year:"115",subject:"警察勤務",num:11,type:"single",stem:"依據《警察勤務區訪查辦法》規定，警勤區員警為指導家戶及社區治安，得提供下列哪一選項，以協力維護社區治安？",options:{A:"治安防衛空間",B:"防制犯罪建議",C:"被害檢測評估",D:"治安評估服務"},ans:"D"},
-  {id:"115-duty-12",year:"115",subject:"警察勤務",num:12,type:"single",stem:"若員警發現網路上流傳以「生成式 AI 人工智慧」所製造、擬真之兒童及少年，客觀上足以引起性慾或羞恥之圖畫（無論是否以真實兒少為對象），應依下列何種法令規定辦理？",options:{A:"僅依《刑法》第 235 條散布猥褻物品罪辦理",B:"依《社會秩序維護法》妨害善良風俗辦理",C:"依《兒童及少年性剝削防制條例》規定辦理",D:"依《兒童及少年福利與權益保障法》規定辦理"},ans:"C"},
-  {id:"115-duty-13",year:"115",subject:"警察勤務",num:13,type:"single",stem:"依據「交通疏導作業程序」規定，使用手控號誌疏導之時機，不包括下列何者？",options:{A:"特種勤務通行路線交通擁擠時",B:"左轉車流影響行車順暢時",C:"重要外賓或行政首長座車通過路口時",D:"特種勤務車隊通過時（指定路線及鄰近路口）"},ans:"B"},
-  {id:"115-duty-14",year:"115",subject:"警察勤務",num:14,type:"single",stem:"查獲重大經濟犯罪案件時，查扣不法所得金額達多少以上，或查獲犯罪嫌疑人數達多少人以上者，應於 4 小時內填具「查獲重大經濟犯罪案件報告表」傳真刑事警察局？",options:{A:"新臺幣五百萬以上，或嫌犯五人以上",B:"新臺幣一千萬以上，或嫌犯十人以上",C:"新臺幣五千萬以上，或嫌犯十五人以上",D:"新臺幣一億元以上，或嫌犯二十人以上"},ans:"B"},
-  {id:"115-duty-15",year:"115",subject:"警察勤務",num:15,type:"single",stem:"依據「處理性侵害案件作業程序」規定，員警處理《刑法》第 221 條及第 222 條之重大性侵害案件，應於被害人或犯罪嫌疑人筆錄製作完成後多久時間內，於雲端治安管制系統辦理重大刑案（發生或破獲）通報，由婦幼隊審核後（含調查筆錄），轉報警政署刑事警察局偵防犯罪指揮中心及刑事警察大隊？",options:{A:"1 小時內",B:"6 小時內",C:"12 小時內",D:"24 小時內"},ans:"A"},
-  {id:"115-duty-16",year:"115",subject:"警察勤務",num:16,type:"single",stem:"警察執行管束及逮捕拘禁程序，若未依法踐行《提審法》所定之法定告知義務，將面臨刑事或行政罰則。依據相關執勤作業程序及《提審法》規定，執行逮捕、拘禁之人員若未於「24 小時內」以書面告知本人及其親友提審意旨，依法將面臨下列何種處罰？",options:{A:"申誡二次之行政懲處",B:"新臺幣十萬元以下罰金",C:"三年以下有期徒刑",D:"五年以下有期徒刑"},ans:"B"},
-  {id:"115-duty-17",year:"115",subject:"警察勤務",num:17,type:"single",stem:"警勤區轄境圖，應標示警勤區內之事項，不包括下列哪一列舉之選項？（1150518釋疑決議：一律給分）",options:{A:"金融機構",B:"學校",C:"重要人士住居所",D:"其他重要治安及交通熱點"},ans:"ALL"},
-  {id:"115-duty-18",year:"115",subject:"警察勤務",num:18,type:"single",stem:"勤務規劃監督機構對勤務執行機構，訂定勤務基準表，互換輪流實施，應依下列哪一正確選項妥予規劃？① 服勤方式之銜接；② 服勤時間之分配；③ 服勤時間之互換；④ 服勤人員之編組。",options:{A:"② ④",B:"① ④",C:"② ③",D:"③ ④"},ans:"A"},
-  {id:"115-duty-19",year:"115",subject:"警察勤務",num:19,type:"single",stem:"依據「警察機關執勤使用微型攝影機及影音資料保存管理要點」，員警於勤務結束後將影音資料轉入專用電腦或外接擴充硬碟保存時，其「檔案名稱」之命名原則為何？",options:{A:"以案件類別及發生地點為原則",B:"以受理報案之案號及時間為原則",C:"以建立人服勤之時段及姓名為原則",D:"以微型攝影機之產品序號及日期為原則"},ans:"C"},
-  {id:"115-duty-20",year:"115",subject:"警察勤務",num:20,type:"single",stem:"依據「護送精神病人就醫作業程序」，就《精神衛生法》所稱：精神疾病，指人的某些狀態表現異常，致其適應生活之功能發生障礙，需給予醫療及照顧之疾病，不包括下列哪一列舉之選項？",options:{A:"思考",B:"反社會人格違常",C:"情緒",D:"認知"},ans:"B"},
-  {id:"115-duty-21",year:"115",subject:"警察勤務",num:21,type:"multi",stem:"依據《警察職權行使法》第 19 條規定，警察對於有下列哪些情形之一者，得為管束？",options:{A:"瘋狂或酒醉，非管束不能救護其生命、身體之危險",B:"意圖自殺，非管束不能救護其生命",C:"暴行或鬥毆，非管束不能預防其傷害",D:"單純拒絕出示身分證明文件，且無犯罪之虞者",E:"其他認為必須救護或有危害公共安全之虞，非管束不能救護或不能預防危害者"},ans:"ABCE"},
-  {id:"115-duty-22",year:"115",subject:"警察勤務",num:22,type:"multi",stem:"依據《治安顧慮人口查訪辦法》，曾犯《刑法》各有關條文之規定者，警察得定期實施查訪之對象者，下列哪些選項正確？",options:{A:"第 174 條第 2 項之罪者",B:"第 296 條之 2 之罪者",C:"第 302 條之罪者",D:"第 327 條之罪者",E:"第 339 條之 3 之罪者"},ans:"CDE"},
-  {id:"115-duty-23",year:"115",subject:"警察勤務",num:23,type:"multi",stem:"依據「協助民眾舉家外出住居安全維護作業程序」，民眾得透過下列哪些管道向警察機關申請此項服務？",options:{A:"撥打 110 報案專線",B:"親赴分駐（派出）所",C:"利用網路申請",D:"透過警勤區員警 LINE 私下轉達",E:"僅限由當地村（里）長代為書面申請"},ans:"ABC"},
-  {id:"115-duty-24",year:"115",subject:"警察勤務",num:24,type:"multi",stem:"依據「警察機關勤前教育實施規定」，有關聯合勤前教育之實施，下列敘述何者正確？",options:{A:"施教重點資料及紀錄，應印發所屬勤務執行機構，置於專案專卷內供員警傳閱",B:"分局、警察局直屬（大）隊、專業警察機關所屬分局及（大）隊為施教單位",C:"以每月上下旬各舉行 1 次為原則",D:"由上級正（副）主官及督察長得輪流出席主持",E:"聯合勤前教育舉行時，基層勤前教育，得免予舉行"},ans:"BE"},
-  {id:"115-duty-25",year:"115",subject:"警察勤務",num:25,type:"multi",stem:"依據《警察職權行使法》，關於警察行使職權蒐集及保存資料之規定，下列敘述何者正確？",options:{A:"警察對於經常發生或經合理判斷可能發生犯罪案件之公共場所，為維護治安之必要時，得協調相關機關（構）裝設監視器",B:"依規定蒐集之監視器資料，除因調查違法行為有保存必要外，至遲應於資料製作完成時起一年內銷毀之",C:"警察對無隱私期待之行為進行長時間動態掌握與蒐證（如跟監），每次期間不得逾一年",D:"於動態蒐證期間，如有必要得延長之，且次數不限，直至無蒐集必要為止",E:"警察依法取得之各項資料，除法律另有特別規定外，至遲應於資料製作完成時起五年內註銷或銷毀之"},ans:"ABCE"},
-  {id:"115-duty-26",year:"115",subject:"警察勤務",num:26,type:"multi",stem:"依據「警察勤務區訪查作業規定」，警察分局應就影響轄區下列所列舉哪些事項，審慎檢討評估，訂定符合地方特性之訪查工作執行基準，陳報警察局核定，警察局彙整各分局執行基準後，統一報警政署備查？",options:{A:"交通",B:"安寧秩序",C:"婦幼",D:"維安",E:"毒品"},ans:"ABC"},
-  {id:"115-duty-27",year:"115",subject:"警察勤務",num:27,type:"multi",stem:"依據「取締妨害風化（俗）案件作業程序」，查獲兒童及少年性剝削案件時，關於「對價」之認定與程序處置，下列敘述何者正確？",options:{A:"對價僅限於金錢交付，不包含其他利益",B:"對價包含名貴禮物、衣飾或供養生活等金錢以外之利益",C:"「有對價」係指於性交或猥褻行為「前」，雙方即有對價之合意",D:"行為人於性交後，為防止事發始給付被害人金錢，尚非該條例所稱之「性剝削」",E:"查獲後應於 7 日內將被害人交由當地主管機關處理"},ans:"BCD"},
-  {id:"115-duty-28",year:"115",subject:"警察勤務",num:28,type:"multi",stem:"依據《警察職權行使法》第 2 條規定，警察為達成其法定任務，於執行職務時，依法採取執行公權力之「具體措施」，下列哪些列舉之選項正確？",options:{A:"蒐集資料",B:"通知",C:"物之扣留",D:"進入住宅",E:"即時強制"},ans:"ABCD"},
-  {id:"115-duty-29",year:"115",subject:"警察勤務",num:29,type:"multi",stem:"依據《警察職權行使法》，警察為查證人民身分，得採取下列哪些必要措施？",options:{A:"攔停人、車、船及其他交通工具",B:"詢問姓名、出生年月日、出生地、國籍、住居所及身分證統一編號等",C:"令出示身分證明文件",D:"若有明顯事實足認其有攜帶足以自殺、自傷或傷害他人之物，得檢查其身體及攜帶之物",E:"遇有抗拒時，無論是否已盡詢問程序，皆可直接使用強制力帶往勤務處所"},ans:"ABCD"},
-  {id:"115-duty-30",year:"115",subject:"警察勤務",num:30,type:"multi",stem:"美國學者 Skogan 認為，社區警政不是一組特定計畫，而是包含變化決策程序，以及創造警局內的新文化，它是一種組織策略，設定優先目標以及鄰里想要警察服務事項的達成方法；社區警政是一個程序而不是產品，其核心要素為下列何者？",options:{A:"諮詢（Consultation）",B:"分權（Decentralization）",C:"調適（Adaptation）",D:"問題解決（Problem Solving）",E:"動員（Mobilization）"},ans:"BD"},
-  {id:"115-duty-31",year:"115",subject:"警察勤務",num:31,type:"multi",stem:"依據「警察機關輪班輪休人員勤休實施要點」，為因應警察工作特殊性，部分勤務不受每日 16 小時之限制。下列敘述哪些正確？",options:{A:"處理 A1 類重大道路交通事故，每日服勤時數得達 20 小時",B:"執行聚眾防處之勤務，每日不受 16 小時限制，惟不得連續超過 3 日",C:"所有例外勤務之每月超時服勤時數上限均可達 120 小時",D:"偵辦內政部警政署列管之重大刑案，每日不受 16 小時限制",E:"各警察機關對於執行本要點第 6 點第 1 項各款之勤務連續超過 2 日之人員，應於原因消滅後，優先排定補休假"},ans:"BDE"},
-  {id:"115-duty-32",year:"115",subject:"警察勤務",num:32,type:"multi",stem:"依據《家庭暴力防治法》所規範家庭成員，含括相關各員及其未成年子女，下列何者為其所規範之家庭成員？",options:{A:"前配偶",B:"曾為配偶之四親等以內血親",C:"曾有同居關係者",D:"曾為直系姻親",E:"曾為四親等以內之旁系血親"},ans:"ABCE"},
-  {id:"115-duty-33",year:"115",subject:"警察勤務",num:33,type:"multi",stem:"關於警察勤務機構之設置與編組，下列敘述何者正確？",options:{A:"警察分駐所、派出所為勤務執行機構，負責警勤區之規劃、勤務執行及督導",B:"分駐所、派出所之設置基準，由內政部定之",C:"偏遠警勤區不能與其他警勤區聯合實施共同勤務者，得設警察駐在所",D:"直轄市、縣（市）警察機關因應警力需要，得將勤務人員集中於警察局，編為勤務隊輪流服勤",E:"警察局於必要時，得設警衛派出所，在特定地區執行守護任務"},ans:"ACE"},
-  {id:"115-duty-34",year:"115",subject:"警察勤務",num:34,type:"multi",stem:"依據《特種勤務條例》，主管機關對安全維護對象，規劃之特種勤務地區，因應危害防止之必要，得劃出安全維護區及設置安全設施，特勤人員及特勤編組人員得對區內及欲進入區內之人員、物品、場所、交通、通訊及其他設備為必要之查驗、管制。下列何者屬於該規劃之特種勤務地區？",options:{A:"行徑路線",B:"蒞臨場所",C:"辦公處所",D:"乘坐之交通工具",E:"駐蹕處所"},ans:"ABCD"},
-  {id:"115-duty-35",year:"115",subject:"警察勤務",num:35,type:"multi",stem:"關於警械使用之限制、調查機制與補償，下列敘述何者正確？",options:{A:"警察人員使用警械致人死亡或重傷爭議事件，內政部應遴聘專家學者組成調查小組調查",B:"調查小組對於警械使用妥適性之判斷，得考量使用人員當時之合理認知",C:"警察人員使用警械，致現場人員傷亡時，應迅速通報救護或送醫，並作必要之保護或戒護",D:"警察人員依規定使用警械，致第三人生命、身體或財產遭受損失時，第三人得請求補償",E:"警察人員違法使用警械致侵害人民權利，依《國家賠償法》辦理；若出於故意之行為所致者，賠償義務機關得向其求償"},ans:"ABCDE"},
-  {id:"115-duty-36",year:"115",subject:"警察勤務",num:36,type:"multi",stem:"依據民國 115 年 1 月 30 日修正之《道路交通安全規則》第 114 條規定，下列何者為汽車駕駛人不得駕車之情形？",options:{A:"患病影響安全駕駛",B:"飲用酒類或其他類似物後，其吐氣所含酒精濃度達每公升 0.15 毫克或血液中酒精濃度達百分之 0.03 以上",C:"操作行車輔助顯示設備",D:"吸食毒品、迷幻藥、麻醉藥品或其他類似管制藥品",E:"操作或觀看娛樂性顯示設備"},ans:"ABD"},
-  {id:"115-duty-37",year:"115",subject:"警察勤務",num:37,type:"multi",stem:"依據民國 114 年修正之「取締疑似施用毒品後駕車作業程序」，當執勤人員實施唾液毒品檢測時，下列處置何者正確？",options:{A:"實施檢測前，應全程錄影並告知檢測流程與有效判讀時間",B:"駕駛人拒絕檢測者，請其於執法紀錄表簽名，並當場舉發、移置保管車輛",C:"如因唾液不足致無法實施檢測，請其配合同意採集尿液",D:"唾液檢測為陰性者，告知檢測結果後人車放行",E:"唾液檢測為陽性者，即由員警自行強制導尿"},ans:"ABCD"},
-  {id:"115-duty-38",year:"115",subject:"警察勤務",num:38,type:"multi",stem:"依據《警察職權行使法》，警察於公共場所或合法進入之場所之人，對下列何者得查證其身分？",options:{A:"行經公共場所、路段及管制站者",B:"滯留於應有停（居）留許可之處所，而無停（居）留許可者",C:"合理懷疑其對已發生之犯罪或即將發生之犯罪知情者",D:"合理懷疑為防止其本人或他人生命、身體之具體危害，有查證其身分之必要者",E:"合理懷疑其有犯罪之嫌疑或有犯罪之虞者"},ans:"BE"},
-  {id:"115-duty-39",year:"115",subject:"警察勤務",num:39,type:"multi",stem:"依據「警察機關勤務指揮中心作業規定」之附件一所示，各級警察機關勤務指揮中心重大事故（情資）報告處理區分表，所規範之重大治安事故為下列何者？",options:{A:"空襲警報",B:"查獲走私毒品或原料",C:"擄人勒贖案件",D:"群眾騷亂",E:"暴徒劫持"},ans:"ADE"},
-  {id:"115-duty-40",year:"115",subject:"警察勤務",num:40,type:"multi",stem:"依據民國 113 年 2 月 17 日修正之《道路交通事故處理辦法》，重大道路交通事故案件或疑似重大道路交通事故案件發生後，警察機關應維持事故現場之完整。下列何種情形有發生之虞者，應與運安會指定負責調查作業之調查官協商後對事故現場進行必要之清理？",options:{A:"殘骸受到二次破壞",B:"環境汙染",C:"運送之危險物品發生爆炸",D:"發生二次災害",E:"事故當事人身分特殊者"},ans:"ABD"},
-
-  // ==================== 115 國文與憲法 (1-40) ====================
-  {id:"115-chi-1",year:"115",subject:"國文與憲法",num:1,type:"single",stem:"〈師說〉:「巫、醫、樂師、百工之人，不恥相師。」文中「相師」的意思最有可能是下列何者？",options:{A:"請求算命先生的指點",B:"「相師」即前文提及的「樂師」",C:"出生時請算命先生排好命盤",D:"拜有能力或技藝的人為師"},ans:"D"},
-  {id:"115-chi-2",year:"115",subject:"國文與憲法",num:2,type:"single",stem:"《史記．循吏列傳》：「石奢者，楚昭王相也，堅直廉正，無所阿避。行縣，道有殺人者，相追之，乃其父也。」與文中「無所阿避」意思最接近的句子是下列何者？",options:{A:"無所適從",B:"不分親疏",C:"不斷逃避",D:"無所事事"},ans:"B"},
-  {id:"115-chi-3",year:"115",subject:"國文與憲法",num:3,type:"single",stem:"同上題，文中「行縣」指的是：",options:{A:"行事作風十分懸疑",B:"行蹤飄移不定",C:"巡視地方",D:"施行郡縣制"},ans:"C"},
-  {id:"115-chi-4",year:"115",subject:"國文與憲法",num:4,type:"single",stem:"《史記．循吏列傳》：「王必欲高車，臣請教閭里使高其梱。」文中的「高車」意思最有可能是下列何者？",options:{A:"高底盤的車",B:"加高車底盤",C:"登上高車",D:"請工匠製作出高級的車"},ans:"B"},
-  {id:"115-chi-5",year:"115",subject:"國文與憲法",num:5,type:"single",stem:"〈論貴粟疏〉：「聖王在上，而民不凍飢者，非能耕而食之，織而衣之也，為開其資財之道也。」文中第三及四句的「食」、「衣」兩字，其詞性應該是下列何者？",options:{A:"名詞",B:"動詞",C:"助動詞",D:"形容詞"},ans:"B"},
-  {id:"115-chi-6",year:"115",subject:"國文與憲法",num:6,type:"single",stem:"同上題，〈論貴粟疏〉作者認為聖明的領導者最重要的是要做到什麼？",options:{A:"開設課程，教人投資理財",B:"打開財庫，救濟災民",C:"打開人民賺取財富的管道",D:"建立財產國有化"},ans:"C"},
-  {id:"115-chi-7",year:"115",subject:"國文與憲法",num:7,type:"single",stem:"下列哪個字的讀音與其他三者不同？",options:{A:"底",B:"邸",C:"砥",D:"扺"},ans:"D"},
-  {id:"115-chi-8",year:"115",subject:"國文與憲法",num:8,type:"single",stem:"在書寫文書時，提到人名而「挪抬」，這個動作用意主要是表示什麼？",options:{A:"對此人表示尊敬",B:"此人名字筆劃太多，當多留空格",C:"書寫的內容太多，怕之後空間不夠，故多留空格",D:"屬於預先處置的措施，以免待會兒還要加入其他人名"},ans:"A"},
-  {id:"115-chi-9",year:"115",subject:"國文與憲法",num:9,type:"single",stem:"駱賓王出身寒門，七歲能詩，號神童。重要著作之一為〈為徐敬業討武曌檄〉。請問下列何者最不可能出現在同個時空與駱賓王宴飲達旦？",options:{A:"李商隱",B:"盧照鄰",C:"陳子昂",D:"王勃"},ans:"A"},
-  {id:"115-chi-10",year:"115",subject:"國文與憲法",num:10,type:"single",stem:"同上題，「曌」字是下列哪個字的異體字？",options:{A:"盟",B:"照",C:"肇",D:"萌"},ans:"B"},
-  {id:"115-chi-11",year:"115",subject:"國文與憲法",num:11,type:"single",stem:"關於憲法之「生命權」敘述，下列何者錯誤？",options:{A:"生命權是各種憲法權利中最重要的一個權利",B:"我國《憲法》條文並未明文規定生命權受保障",C:"依憲法法庭之判決，生命權受《憲法》第 15 條生存權所涵蓋",D:"生命權之保障仍有例外，並非絕對不可侵犯之權利"},ans:"C"},
-  {id:"115-chi-12",year:"115",subject:"國文與憲法",num:12,type:"single",stem:"依憲法法庭之判決，總統與立法院之間的關係，下列何者錯誤？",options:{A:"總統與立法院之間並無權力從屬關係",B:"總統不對立法院負責，立法院亦無直接向總統問責之憲法權限",C:"《憲法增修條文》關於總統國情報告之規定，僅係容許立法院有被動聽取國情報告之權",D:"立法院依《憲法增修條文》得指定總統國情報告之議題與內容"},ans:"D"},
-  {id:"115-chi-13",year:"115",subject:"國文與憲法",num:13,type:"single",stem:"立法院所設之各種委員會依《憲法》第 67 條第 2 項之規定，邀請政府人員到會備詢時，下列何者並無應邀說明之義務？",options:{A:"公平交易委員會委員",B:"法務部調查局局長",C:"海洋委員會主任秘書",D:"參謀總長"},ans:"A"},
-  {id:"115-chi-14",year:"115",subject:"國文與憲法",num:14,type:"single",stem:"依憲法法庭 113 年憲判字第 5 號判決（侮辱公務員罪及侮辱職務罪案）之意旨，下列敘述何者錯誤？",options:{A:"侮辱公務員罪及侮辱職務罪皆涉及對於表意內容之限制",B:"侮辱公務員罪及侮辱職務罪所保護之公職威嚴法益，屬重要公共利益",C:"人民當場侮辱公務員之行為，客觀上須足以影響公務員執行公務，始可能構成犯罪",D:"侮辱職務罪於本號判決中遭宣告違憲"},ans:"B"},
-  {id:"115-chi-15",year:"115",subject:"國文與憲法",num:15,type:"single",stem:"依司法院大法官解釋，關於「授權明確性原則」之敘述，下列何者錯誤？",options:{A:"此原則係指法律授權主管機關發布命令時，其授權之目的、範圍與內容應具體明確",B:"我國大法官解釋首次提及授權明確性之要求，是在司法院大法官釋字第 443 號解釋中",C:"行政機關制定發布的命令對人民權利影響愈強烈，法律授權之明確程度應更高",D:"涉及刑罰規定之授權條款，必須使人民得預見其行為之可罰"},ans:"B"},
-  {id:"115-chi-16",year:"115",subject:"國文與憲法",num:16,type:"single",stem:"公務員若有違法或失職之行為，應由監察院提出彈劾案。但下列何者不適用此一程序？",options:{A:"行政院院長",B:"考試院之職員",C:"總統、副總統",D:"監察院本身之人員"},ans:"C"},
-  {id:"115-chi-17",year:"115",subject:"國文與憲法",num:17,type:"single",stem:"關於表現自由、言論自由及集會自由之敘述，下列何者正確？",options:{A:"表現自由是言論自由的一部分，僅限於口語與文字表達",B:"表現自由涵蓋範圍較廣，可包括言論、講學、著作、出版等自由",C:"依大法官解釋，藝術表演並不屬於表現自由之保障範圍",D:"人民於室外之集會遊行，應一律向主管機關申請事前許可"},ans:"B"},
-  {id:"115-chi-18",year:"115",subject:"國文與憲法",num:18,type:"single",stem:"依司法院大法官解釋，關於大學自治之敘述，下列何者錯誤？",options:{A:"大學課程如何訂定以及大學生之畢業條件，均屬大學自治之範圍",B:"特定事項若屬大學自治之範圍，則無牴觸《憲法》第 23 條法律保留原則之問題",C:"大學訂定涉及學生退學之相關規範，仍應有法律明確之授權",D:"大學就自治範圍內之事項訂定規範時，仍受《憲法》其他基本權之拘束"},ans:"C"},
-  {id:"115-chi-19",year:"115",subject:"國文與憲法",num:19,type:"single",stem:"關於監察院國家人權委員會之敘述，下列何者正確？",options:{A:"國家人權委員會之委員總數為 7 人",B:"國家人權委員會之委員由監察院院長自監察委員中遴派之",C:"國家人權委員會之主任委員由監察院院長兼任之",D:"國家人權委員會之所有委員應每年改派，不得連任"},ans:"C"},
-  {id:"115-chi-20",year:"115",subject:"國文與憲法",num:20,type:"single",stem:"關於國家機關重要人事之任命，下列敘述何者正確？",options:{A:"行政院正副院長由總統提名，經立法院同意後任命之",B:"國家通訊傳播委員會委員由行政院院長提請總統任命之",C:"監察院審計長由監察院院長提名，經立法院同意後任命之",D:"公務人員保障暨培訓委員會之專任委員由考試院院長提請總統任命之"},ans:"D"},
-  {id:"115-chi-21",year:"115",subject:"國文與憲法",num:21,type:"multi",stem:"《列異傳》：「寶父先有所寵侍婢，母甚妒忌，及父亡，母乃生推婢於墓中。寶兄弟年小，不之審也。後十餘年，母喪開墓，而婢伏棺如生，載還，經日乃蘇。言其父常取飲食與之，恩情如生。在家中吉凶輒語之，考校悉驗，地中亦不覺為惡。既而嫁之，生子。又寶兄嘗病氣絕，積日不冷，後遂寤，云見天地間鬼神事，如夢覺，不自知死。寶以此遂撰集古今神祗靈異人物變化，名為《搜神記》。」根據此記載，干寶之所以撰寫《搜神記》是因為他遇到什麼靈異事件？",options:{A:"其兄死而復活",B:"其母因妒咒父而亡",C:"先父寵婢於墓室中十餘年不死",D:"其兄自云見天地鬼神，不知己死",E:"先父寵婢吉凶預言皆中"},ans:"ACDE"},
-  {id:"115-chi-22",year:"115",subject:"國文與憲法",num:22,type:"multi",stem:"《史記．循吏列傳》：「以子產為相。為相一年，豎子不戲狎，斑白不提挈，僮子不犂畔；二年，市不豫賈；三年，門不夜關，道不拾遺；四年，田器不歸；五年，士無尺籍，喪期不令而治。」根據上文，子產的政績反映在下列哪些方面？",options:{A:"全體人民的教化程度",B:"體育表現",C:"治安",D:"科學研究",E:"經濟秩序"},ans:"ACE"},
-  {id:"115-chi-23",year:"115",subject:"國文與憲法",num:23,type:"multi",stem:"《貞觀政要．論奢縱》記到馬周提醒李世民：「今陛下雖以大功定天下，而積德日淺，固當崇禹、湯、文、武之道，廣施德化，使恩有餘地，為子孫立萬代之基。」文中馬周認為要穩定天下，靠的應該是李世民的：",options:{A:"玄武門政變",B:"推崇聖王之道，廣施德化",C:"擊敗竇建德的軍功",D:"對老百姓的好，要超過老百姓回報的能力",E:"擊敗王世充的軍功"},ans:"BD"},
-  {id:"115-chi-24",year:"115",subject:"國文與憲法",num:24,type:"multi",stem:"借代是一種不直接說出本名，而借用與其相關的名稱或特徵來代替書寫的修辭手法。下列各個借代的本體與借體，何者配對為是？",options:{A:"翰墨—文章書畫",B:"東市—刑場",C:"朱門—富貴人家",D:"杏林—教育界",E:"杜康—酒"},ans:"ABCE"},
-  {id:"115-chi-25",year:"115",subject:"國文與憲法",num:25,type:"multi",stem:"〈中庸〉：「見乎蓍龜，動乎四體。」其中「蓍」字與下列何字字音相同？",options:{A:"肆",B:"事",C:"濕",D:"師",E:"四"},ans:"CD"},
-  {id:"115-chi-26",year:"115",subject:"國文與憲法",num:26,type:"multi",stem:"〈學記〉：「古之學者，比物醜類。」其中的「比」、「醜」意為相類。下列何者中的「醜」意思與其相同？",options:{A:"越王勾踐遇吳王之醜",B:"行莫醜於辱先，詬莫大於宮刑",C:"有嘉折首，獲匪其醜",D:"今天下地醜德齊，莫能相尚",E:"上有五氣、下有五行、民有五醜"},ans:"CDE"},
-  {id:"115-chi-27",year:"115",subject:"國文與憲法",num:27,type:"multi",stem:"異形詞組指的是二個以上音義相同，但寫法不同的詞組，各個詞形都被視為正確且通行的寫法。請問以下哪些是常見的異形詞組？",options:{A:"煩忙／繁忙",B:"淡泊／澹泊",C:"品嘗／品嚐",D:"突出／凸出",E:"奮力／奮勵"},ans:"BCD"},
-  {id:"115-chi-28",year:"115",subject:"國文與憲法",num:28,type:"multi",stem:"經過一年苦讀，美美總於如願考上中文研究所。她想研究現代台灣詩人的詩，指導教授推薦下列哪些人的作品給她會比較恰當？",options:{A:"賴和",B:"張大春",C:"席慕蓉",D:"柏楊",E:"洛夫"},ans:"CE"},
-  {id:"115-chi-29",year:"115",subject:"國文與憲法",num:29,type:"multi",stem:"下列有關《孫子兵法》之敘述，何者正確？",options:{A:"作者是孫臏",B:"認為戰爭應該以拖待變",C:"全書約 6000 多字，一般分為 13 篇",D:"強調不戰而屈人之兵",E:"因作者被吳王重用，書又稱《吳孫子》"},ans:"CDE"},
-  {id:"115-chi-30",year:"115",subject:"國文與憲法",num:30,type:"multi",stem:"下列有關《折獄龜鑑》之敘述，何者正確？",options:{A:"是目前所知時代最早成系統的法醫學專門文獻",B:"全書分成檢驗總論、驗屍、驗骨、驗傷、中毒、救死方六大主題",C:"作者是南宋的鄭克",D:"作者是南宋的宋慈",E:"後續有許多人進行補訂，如清人胡文炳的《折獄龜鑑補》"},ans:"CE"},
-  {id:"115-chi-31",year:"115",subject:"國文與憲法",num:31,type:"multi",stem:"依司法院大法官解釋之意旨，關於給付行政與法律保留原則之關係，下列敘述何者正確？",options:{A:"給付行政因並未限制人民權利，因此皆不須有法律或法律授權之命令為其依據",B:"給付行政若與實現人民基本權利之保障有關，則有法律保留原則之適用",C:"給付行政若涉及公共利益之重大事項，則有法律保留原則之適用",D:"公務員之退休年資如何採計屬於法律保留之事項",E:"給付行政受法律規範之密度較干預行政嚴格"},ans:"BCD"},
-  {id:"115-chi-32",year:"115",subject:"國文與憲法",num:32,type:"multi",stem:"依司法院大法官釋字第 603 號解釋之意旨，下列敘述何者正確？",options:{A:"憲法對於個人資訊隱私權之保障並非絕對",B:"國家制定法律強制蒐集個人資訊時，應視所蒐集之資訊是否屬私密敏感事項而受不同密度之審查",C:"《戶籍法》關於按捺指紋之要求，不具任何合憲之重要公益目的",D:"防範犯罪雖屬按捺指紋所得追求之重大公益目的，但基於此一目的而強制國民按捺指紋，不符比例原則之要求",E:"國家大規模蒐集人民指紋資料時，應於法律中明文禁止法定目的外之使用"},ans:"ABE"},
-  {id:"115-chi-33",year:"115",subject:"國文與憲法",num:33,type:"multi",stem:"依司法院大法官解釋與憲法法庭之判決，下列何者屬於「憲法保留」之事項？",options:{A:"獨立行政機關委員之任期",B:"犯罪嫌疑人遭逮捕後，移送法院之時限",C:"對於宗教團體內部自治事項之規範",D:"總統之地位及職權",E:"公務員免職處分之標準"},ans:"BD"},
-  {id:"115-chi-34",year:"115",subject:"國文與憲法",num:34,type:"multi",stem:"依司法院大法官解釋之意旨，關於人民選擇職業自由之敘述，下列何者正確？",options:{A:"人民選擇職業之自由之憲法條文依據為《憲法》第 22 條",B:"《道路交通管理處罰條例》曾規定，暴力犯罪與性犯罪前科者不得辦理營業小客車駕駛人執業登記，此乃對於職業自由「客觀條件」的限制",C:"禁止非視障者從事按摩業，係屬對非視障者選擇職業自由之「主觀條件」限制",D:"地方政府要求限制級電子遊戲場業營業場所應距離學校、醫院等地點若干公尺以上，此為對於「執行職業自由」的限制",E:"立法者若欲就人民職業自由之「主觀條件」加以限制，須有重要公共利益存在"},ans:"DE"},
-  {id:"115-chi-35",year:"115",subject:"國文與憲法",num:35,type:"multi",stem:"依憲法法庭 112 年憲判字第 8 號關於《刑法》誹謗罪合憲性之判決意旨，下列敘述何者正確？",options:{A:"言論之公益論辯貢獻度愈低，相對人之名譽權受保障程度原則上即應愈高",B:"涉及公益但完全未經查證程序之誹謗言論，不得免於誹謗罪之處罰",C:"經合理查證程序但所引用之資料係不實資訊者，不得免於誹謗罪之處罰",D:"表意人透過傳播媒體發表誹謗言論，其事前查證程序應更嚴謹",E:"僅涉及私德而與公益無關之誹謗言論，表意人之言論自由應完全退讓於名譽權與隱私權之保護"},ans:"ABDE"},
-  {id:"115-chi-36",year:"115",subject:"國文與憲法",num:36,type:"multi",stem:"依憲法法庭之判決，關於「免職公務員之權力」的敘述，下列何者正確？",options:{A:"免職權為行政機關人事權之核心事項，但任命權則非為核心事項",B:"立法者就免職的要件與程序等事項，制定法律予以規定，係對行政機關免職權之不當干預",C:"從功能最適原則的觀點，行政部門較司法機關更適合成為行使免職權之主要機關",D:"《憲法》第 77 條規定略以，「司法院為國家最高司法機關，掌理……公務員之懲戒。」然此一條文不應被理解為係對行政懲處與司法懲戒之雙軌併行制的否定",E:"《公務人員考績法》關於考績丁等者免職之規定，並未違反《憲法》第 18 條服公職權之保障"},ans:"CDE"},
-  {id:"115-chi-37",year:"115",subject:"國文與憲法",num:37,type:"multi",stem:"關於司法獨立之敘述，下列何者正確？",options:{A:"《憲法》第 80 條規定：「法官須超出黨派以外，依據法律獨立審判，不受任何干涉。」司法院大法官亦屬此一條文所稱之法官",B:"法官得具政黨黨籍身分，但不得參與所屬政黨之活動",C:"依司法院大法官解釋，立法院刪除司法院大法官支領司法人員專業加給之預算，係屬違憲",D:"司法院大法官如同一般法院之法官，皆享有終身職待遇之保障",E:"司法院之年度司法概算，由司法院自行提出送立法院審議"},ans:"AC"},
-  {id:"115-chi-38",year:"115",subject:"國文與憲法",num:38,type:"multi",stem:"關於限制人身自由所應遵循之正當法律程序，依司法院大法官解釋之意旨，下列敘述何者正確？",options:{A:"依《行政執行法》所進行之管收程序，於決定管收前，應經法院之審問",B:"為阻絕疫情蔓延所施之強制隔離處置，無須於事前經法院決定",C:"受強制隔離處置之人民，得於遭隔離後，向法院聲請提審，法院不得拒絕",D:"依《入出國及移民法》對外國人之暫時收容，作成暫時收容處分前，無須經法院審問",E:"受暫時收容之外國人若對收容處分表示不服，主管機關應即於 24 小時內將其移送法院，以決定是否予以收容"},ans:"ABDE"},
-  {id:"115-chi-39",year:"115",subject:"國文與憲法",num:39,type:"multi",stem:"下列涉及訴訟程序的相關規範，何者曾遭大法官認定違憲？",options:{A:"民事財產權訴訟程序中，於第二審判決後，當事人因上訴所得受之利益若未逾一定數額，不得上訴於第三審",B:"選舉、罷免訴訟以二審為終結，不得提起再審",C:"刑事訴訟第二審判決撤銷原審無罪判決並自為有罪判決，被告不得上訴於第三審",D:"受羈押被告不服看守所之處遇或處分，除依規定提起申訴外，不得向法院請求救濟",E:"監獄之管理措施對於受刑人權利之侵害顯屬輕微，僅得循監獄內部機制提出申訴"},ans:"CD"},
-  {id:"115-chi-40",year:"115",subject:"國文與憲法",num:40,type:"multi",stem:"關於涉及平等權之司法院大法官解釋與憲法法庭判決之敘述，下列何者正確？",options:{A:"《憲法》第 7 條規定：「中華民國人民，無分男女、宗教、種族、階級、黨派，在法律上一律平等。」條文中之五項個人特徵為列舉而非例示",B:"《勞動基準法》中關於原則禁止雇主使女性勞工於夜間工作之規定，因係為實現國家對女性之積極保護義務，因此並未牴觸《憲法》第 7 條性別平等之保障",C:"《臺灣地區與大陸地區人民關係條例》規定，大陸地區人民非在臺灣地區設有戶籍滿十年不得擔任公務人員，此一規定係追求合理正當之目的，並未牴觸《憲法》第 7 條之平等權",D:"《祭祀公業條例》以性別作為認定祭祀公業派下員身分之標準，牴觸《憲法》第 7 條保障性別平等之意旨",E:"《原住民身分法》要求，原住民與非原住民結婚生子女，應從具原住民身分之父或母之姓或原住民傳統名字，始得取得原住民身分，此一要求牴觸平等權之保障"},ans:"CDE"},
-
-  // ==================== 115 英文 (1-40) ====================
-  {id:"115-eng-1",year:"115",subject:"英文",num:1,type:"single",stem:"After the suspect fired several shots, he dropped the empty ________ on the ground and fled the scene.",options:{A:"magazine",B:"holster",C:"trigger",D:"barrel"},ans:"A"},
-  {id:"115-eng-2",year:"115",subject:"英文",num:2,type:"single",stem:"The _____ issue under analysis in the preventive patrol experiment was routine preventive patrol and its impact on crime and the community.",options:{A:"incite",B:"immediately",C:"immediacy",D:"immediate"},ans:"D"},
-  {id:"115-eng-3",year:"115",subject:"英文",num:3,type:"single",stem:"When the firefighter arrived at the scene, they found the building completely ______ in flames, making it difficult to search for survivors.",options:{A:"extinguished",B:"engulfed",C:"detached",D:"ventilated"},ans:"B"},
-  {id:"115-eng-4",year:"115",subject:"英文",num:4,type:"single",stem:"Criminals are increasingly using ________ technology to create realistic video and audio of family members to trick victims into sending money.",options:{A:"deepfake",B:"bluetooth",C:"broadband",D:"dashboard"},ans:"A"},
-  {id:"115-eng-5",year:"115",subject:"英文",num:5,type:"single",stem:"The officer decided to ______ the vehicle after discovering that the driver’s registration had been expired for over a year.",options:{A:"accelerate",B:"impound",C:"ignore",D:"overhaul"},ans:"B"},
-  {id:"115-eng-6",year:"115",subject:"英文",num:6,type:"single",stem:"SARA is the acronym used to refer to these four stages of problem-solving— _____, analysis, response, and assessment.",options:{A:"stopping",B:"securitization",C:"setting",D:"scanning"},ans:"D"},
-  {id:"115-eng-7",year:"115",subject:"英文",num:7,type:"single",stem:"In the US, before 2001, border functions were divided among various federal departments; however, the 9/11 events called for _____ of most of them under one roof.",options:{A:"perception",B:"sensation",C:"consolidation",D:"transition"},ans:"C"},
-  {id:"115-eng-8",year:"115",subject:"英文",num:8,type:"single",stem:"The detective is currently conducting an ________ to determine the cause of the suspicious fire.",options:{A:"investigation",B:"investment",C:"interaction",D:"interruption"},ans:"A"},
-  {id:"115-eng-9",year:"115",subject:"英文",num:9,type:"single",stem:"A key ________ who was present at the intersection provided a detailed description of the hit-and-run vehicle.",options:{A:"suspect",B:"witness",C:"victim",D:"offender"},ans:"B"},
-  {id:"115-eng-10",year:"115",subject:"英文",num:10,type:"single",stem:"______change has made it possible for members to share information much more quickly and easily.",options:{A:"Tech",B:"Technologist",C:"Technology",D:"Technological"},ans:"D"},
-  {id:"115-eng-11",year:"115",subject:"英文",num:11,type:"single",passage:"Qs 11–15: Choose the word or phrase that best completes the passage.\n\nOn January 17, at approximately 01:00 a.m., I was dispatched to 112 4th Street to investigate a reported robbery. Upon arrival, I conducted an interview with the victim, Rosa Hernandez, who exhibited signs of severe emotional distress. She recounted that an unidentified tall male [11] her within the confines of a secluded alleyway. The perpetrator approached from the rear and held her at knifepoint, effectively neutralizing any possibility of resistance. He then [12] her of all personal effects, threatening to inflict bodily harm should she fail to [13]. Compelled by the immediate threat to her safety, Hernandez surrendered her handbag and wedding ring. The assailant promptly [14] the property and retreated toward the main thoroughfare. Due to the lack of illumination and the traumatic nature of the encounter, the victim was [15] of providing a precise physical identification of the suspect.",stem:"第 11 格應填入下列何者？",options:{A:"inspected",B:"ambushed",C:"accompanied",D:"entertained"},ans:"B"},
-  {id:"115-eng-12",year:"115",subject:"英文",num:12,type:"single",passage:"Qs 11–15: Choose the word or phrase that best completes the passage.\n\nOn January 17, at approximately 01:00 a.m., I was dispatched to 112 4th Street to investigate a reported robbery. Upon arrival, I conducted an interview with the victim, Rosa Hernandez, who exhibited signs of severe emotional distress. She recounted that an unidentified tall male [11] her within the confines of a secluded alleyway. The perpetrator approached from the rear and held her at knifepoint, effectively neutralizing any possibility of resistance. He then [12] her of all personal effects, threatening to inflict bodily harm should she fail to [13]. Compelled by the immediate threat to her safety, Hernandez surrendered her handbag and wedding ring. The assailant promptly [14] the property and retreated toward the main thoroughfare. Due to the lack of illumination and the traumatic nature of the encounter, the victim was [15] of providing a precise physical identification of the suspect.",stem:"第 12 格應填入下列何者？",options:{A:"reminded",B:"deprived",C:"persuaded",D:"informed"},ans:"B"},
-  {id:"115-eng-13",year:"115",subject:"英文",num:13,type:"single",passage:"Qs 11–15: Choose the word or phrase that best completes the passage.\n\nOn January 17, at approximately 01:00 a.m., I was dispatched to 112 4th Street to investigate a reported robbery. Upon arrival, I conducted an interview with the victim, Rosa Hernandez, who exhibited signs of severe emotional distress. She recounted that an unidentified tall male [11] her within the confines of a secluded alleyway. The perpetrator approached from the rear and held her at knifepoint, effectively neutralizing any possibility of resistance. He then [12] her of all personal effects, threatening to inflict bodily harm should she fail to [13]. Compelled by the immediate threat to her safety, Hernandez surrendered her handbag and wedding ring. The assailant promptly [14] the property and retreated toward the main thoroughfare. Due to the lack of illumination and the traumatic nature of the encounter, the victim was [15] of providing a precise physical identification of the suspect.",stem:"第 13 格應填入下列何者？",options:{A:"comply",B:"hesitate",C:"negotiate",D:"rebel"},ans:"A"},
-  {id:"115-eng-14",year:"115",subject:"英文",num:14,type:"single",passage:"Qs 11–15: Choose the word or phrase that best completes the passage.\n\nOn January 17, at approximately 01:00 a.m., I was dispatched to 112 4th Street to investigate a reported robbery. Upon arrival, I conducted an interview with the victim, Rosa Hernandez, who exhibited signs of severe emotional distress. She recounted that an unidentified tall male [11] her within the confines of a secluded alleyway. The perpetrator approached from the rear and held her at knifepoint, effectively neutralizing any possibility of resistance. He then [12] her of all personal effects, threatening to inflict bodily harm should she fail to [13]. Compelled by the immediate threat to her safety, Hernandez surrendered her handbag and wedding ring. The assailant promptly [14] the property and retreated toward the main thoroughfare. Due to the lack of illumination and the traumatic nature of the encounter, the victim was [15] of providing a precise physical identification of the suspect.",stem:"第 14 格應填入下列何者？",options:{A:"distributed",B:"abandoned",C:"exchanged",D:"fled with"},ans:"D"},
-  {id:"115-eng-15",year:"115",subject:"英文",num:15,type:"single",passage:"Qs 11–15: Choose the word or phrase that best completes the passage.\n\nOn January 17, at approximately 01:00 a.m., I was dispatched to 112 4th Street to investigate a reported robbery. Upon arrival, I conducted an interview with the victim, Rosa Hernandez, who exhibited signs of severe emotional distress. She recounted that an unidentified tall male [11] her within the confines of a secluded alleyway. The perpetrator approached from the rear and held her at knifepoint, effectively neutralizing any possibility of resistance. He then [12] her of all personal effects, threatening to inflict bodily harm should she fail to [13]. Compelled by the immediate threat to her safety, Hernandez surrendered her handbag and wedding ring. The assailant promptly [14] the property and retreated toward the main thoroughfare. Due to the lack of illumination and the traumatic nature of the encounter, the victim was [15] of providing a precise physical identification of the suspect.",stem:"第 15 格應填入下列何者？",options:{A:"incapable",B:"suspicious",C:"confident",D:"intentional"},ans:"A"},
-  {id:"115-eng-16",year:"115",subject:"英文",num:16,type:"single",passage:"Qs 16–20: Reading Comprehension\n\nFor business professionals traveling internationally, maintaining situational awareness regarding transportation is a vital part of personal safety. While most transit services in major cities are reliable, travelers must remain cautious of unauthorized operators. These risks range from simple fare overcharging to more serious crimes, such as luggage theft or, in extreme cases, kidnapping for ransom.\n\nTo minimize these risks, it is essential to use only licensed and regulated carriers. Always verify a driver’s official credentials before entering a vehicle. A legitimate driver should display an ID badge that includes their name, photo, and company details. This simple check creates a record of the journey, making it easier to hold the driver or company accountable if any issues arise.\n\nIn the era of digital ride-hailing apps, safety protocols should also include physical verification. Before getting into a car, you must confirm that the license plate, the driver’s face, and the vehicle’s make and model match the information shown on the app. Additionally, using real-time location sharing allows your colleagues or security team to track your progress. Ignoring these steps is a major security oversight that could lead to unnecessary danger. Ultimately, being proactive about your transit choices is a key responsibility for any professional on the road.",stem:"According to the text, why is it important to check a driver’s ID badge?",options:{A:"It ensures the driver will take the fastest route possible.",B:"It allows the traveler to qualify for corporate travel discounts.",C:"It provides a way to hold the driver or company responsible for their conduct.",D:"It helps the traveler remember the driver's name for future bookings."},ans:"C"},
-  {id:"115-eng-17",year:"115",subject:"英文",num:17,type:"single",passage:"Qs 16–20: Reading Comprehension\n\nFor business professionals traveling internationally, maintaining situational awareness regarding transportation is a vital part of personal safety. While most transit services in major cities are reliable, travelers must remain cautious of unauthorized operators. These risks range from simple fare overcharging to more serious crimes, such as luggage theft or, in extreme cases, kidnapping for ransom.\n\nTo minimize these risks, it is essential to use only licensed and regulated carriers. Always verify a driver’s official credentials before entering a vehicle. A legitimate driver should display an ID badge that includes their name, photo, and company details. This simple check creates a record of the journey, making it easier to hold the driver or company accountable if any issues arise.\n\nIn the era of digital ride-hailing apps, safety protocols should also include physical verification. Before getting into a car, you must confirm that the license plate, the driver’s face, and the vehicle’s make and model match the information shown on the app. Additionally, using real-time location sharing allows your colleagues or security team to track your progress. Ignoring these steps is a major security oversight that could lead to unnecessary danger. Ultimately, being proactive about your transit choices is a key responsibility for any professional on the road.",stem:"What does the term "unauthorized operators" refer to in the first paragraph?",options:{A:"Drivers who are not employed by a specific digital app.",B:"People who provide transportation services without a legal license.",C:"Legitimate taxi companies that have gone out of business.",D:"Airport employees who help passengers with their luggage."},ans:"B"},
-  {id:"115-eng-18",year:"115",subject:"英文",num:18,type:"single",passage:"Qs 16–20: Reading Comprehension\n\nFor business professionals traveling internationally, maintaining situational awareness regarding transportation is a vital part of personal safety. While most transit services in major cities are reliable, travelers must remain cautious of unauthorized operators. These risks range from simple fare overcharging to more serious crimes, such as luggage theft or, in extreme cases, kidnapping for ransom.\n\nTo minimize these risks, it is essential to use only licensed and regulated carriers. Always verify a driver’s official credentials before entering a vehicle. A legitimate driver should display an ID badge that includes their name, photo, and company details. This simple check creates a record of the journey, making it easier to hold the driver or company accountable if any issues arise.\n\nIn the era of digital ride-hailing apps, safety protocols should also include physical verification. Before getting into a car, you must confirm that the license plate, the driver’s face, and the vehicle’s make and model match the information shown on the app. Additionally, using real-time location sharing allows your colleagues or security team to track your progress. Ignoring these steps is a major security oversight that could lead to unnecessary danger. Ultimately, being proactive about your transit choices is a key responsibility for any professional on the road.",stem:"Which of the following is a recommended safety step for using ride-hailing apps?",options:{A:"Paying the driver in cash to avoid digital tracking.",B:"Checking if the car's physical details match the app's data.",C:"Sharing your personal phone number with the driver for better communication.",D:"Waiting inside the vehicle while the driver verifies your identity."},ans:"B"},
-  {id:"115-eng-19",year:"115",subject:"英文",num:19,type:"single",passage:"Qs 16–20: Reading Comprehension\n\nFor business professionals traveling internationally, maintaining situational awareness regarding transportation is a vital part of personal safety. While most transit services in major cities are reliable, travelers must remain cautious of unauthorized operators. These risks range from simple fare overcharging to more serious crimes, such as luggage theft or, in extreme cases, kidnapping for ransom.\n\nTo minimize these risks, it is essential to use only licensed and regulated carriers. Always verify a driver’s official credentials before entering a vehicle. A legitimate driver should display an ID badge that includes their name, photo, and company details. This simple check creates a record of the journey, making it easier to hold the driver or company accountable if any issues arise.\n\nIn the era of digital ride-hailing apps, safety protocols should also include physical verification. Before getting into a car, you must confirm that the license plate, the driver’s face, and the vehicle’s make and model match the information shown on the app. Additionally, using real-time location sharing allows your colleagues or security team to track your progress. Ignoring these steps is a major security oversight that could lead to unnecessary danger. Ultimately, being proactive about your transit choices is a key responsibility for any professional on the road.",stem:"What is the author's view on "real-time location sharing"?",options:{A:"It is a helpful tool for keeping others informed of your safety.",B:"It is an unnecessary invasion of a traveler's personal privacy.",C:"It is only required when traveling in high-risk war zones.",D:"It is a feature that often drains the phone's battery too quickly."},ans:"A"},
-  {id:"115-eng-20",year:"115",subject:"英文",num:20,type:"single",passage:"Qs 16–20: Reading Comprehension\n\nFor business professionals traveling internationally, maintaining situational awareness regarding transportation is a vital part of personal safety. While most transit services in major cities are reliable, travelers must remain cautious of unauthorized operators. These risks range from simple fare overcharging to more serious crimes, such as luggage theft or, in extreme cases, kidnapping for ransom.\n\nTo minimize these risks, it is essential to use only licensed and regulated carriers. Always verify a driver’s official credentials before entering a vehicle. A legitimate driver should display an ID badge that includes their name, photo, and company details. This simple check creates a record of the journey, making it easier to hold the driver or company accountable if any issues arise.\n\nIn the era of digital ride-hailing apps, safety protocols should also include physical verification. Before getting into a car, you must confirm that the license plate, the driver’s face, and the vehicle’s make and model match the information shown on the app. Additionally, using real-time location sharing allows your colleagues or security team to track your progress. Ignoring these steps is a major security oversight that could lead to unnecessary danger. Ultimately, being proactive about your transit choices is a key responsibility for any professional on the road.",stem:"Which word is closest in meaning to "proactive" as used in the final paragraph?",options:{A:"passive",B:"hesitant",C:"precautionary",D:"aggressive"},ans:"C"},
-  {id:"115-eng-21",year:"115",subject:"英文",num:21,type:"multi",stem:"Which of the following items are considered "Standard Issue" equipment for a patrol officer?",options:{A:"handcuffs and a key",B:"a bulletproof vest",C:"a search warrant signed by a judge",D:"a two-way radio for communication",E:"a service pistol or sidearm"},ans:"ABDE"},
-  {id:"115-eng-22",year:"115",subject:"英文",num:22,type:"multi",stem:"Which of the following are recognized categories of terrorist attack methods?",options:{A:"chemical agent release",B:"public concert",C:"search and seizure",D:"vehicle-ramming incidents",E:"cyber attack"},ans:"ADE"},
-  {id:"115-eng-23",year:"115",subject:"英文",num:23,type:"multi",stem:"Which of the following are types of plagiarism?",options:{A:"direct copying without citation",B:"paraphrasing without giving credit",C:"pneumonoultramicroscopicsilicovolcanoconiosis",D:"citing all references correctly",E:"properly quoting and citing sources"},ans:"AB"},
-  {id:"115-eng-24",year:"115",subject:"英文",num:24,type:"multi",stem:"What _______ have _______ _______ the corruption?",options:{A:"can / maybe / causing",B:"could / possibly / caused",C:"might / perhaps / caused",D:"should / definitely / causing",E:"can / definitely / causing"},ans:"BC"},
-  {id:"115-eng-25",year:"115",subject:"英文",num:25,type:"multi",stem:"Which of the following are common methods to protect information security?",options:{A:"installing antivirus and firewall protections",B:"sharing passwords with colleagues",C:"ignoring suspicious emails or links",D:"regularly updating software and systems",E:"using strong, unique passwords"},ans:"ACDE"},
-  {id:"115-eng-26",year:"115",subject:"英文",num:26,type:"multi",stem:"Please choose the words related to “Situational Crime Prevention”.",options:{A:"target hardening",B:"surveillance",C:"emergency landing",D:"translation services",E:"jury duty"},ans:"AB"},
-  {id:"115-eng-27",year:"115",subject:"英文",num:27,type:"multi",stem:"Which of the following are functions of M-Police?",options:{A:"road construction",B:"umbilicus",C:"space exploration",D:"identity verification",E:"emergency alerts"},ans:"DE"},
-  {id:"115-eng-28",year:"115",subject:"英文",num:28,type:"multi",stem:"Barking is a normal behavior for dogs; however, when they bark _____, they become a nuisance to their owners and the neighborhood.",options:{A:"quietly",B:"continuously",C:"underwater",D:"constantly",E:"upside-down"},ans:"BD"},
-  {id:"115-eng-29",year:"115",subject:"英文",num:29,type:"multi",stem:"My mother spent NT$10,000 on a cream product which claims to be able to _____ eye wrinkles.",options:{A:"worry",B:"occasional",C:"smooth",D:"reduce",E:"remove"},ans:"CDE"},
-  {id:"115-eng-30",year:"115",subject:"英文",num:30,type:"multi",stem:"Which of the following are considered "Non-lethal Force"?",options:{A:"pepper spray",B:"a service pistol",C:"a Taser (conducted energy device)",D:"an expandable baton",E:"rubber bullets or bean bag rounds"},ans:"ACDE"},
-  {id:"115-eng-31",year:"115",subject:"英文",num:31,type:"multi",stem:"Which of the following words are related to "Homicide"?",options:{A:"murder",B:"manslaughter",C:"slander",D:"killing",E:"kidnap"},ans:"ABD"},
-  {id:"115-eng-32",year:"115",subject:"英文",num:32,type:"multi",stem:"Which of the following describe "Probable Cause" for an arrest?",options:{A:"An officer witnesses a person breaking into a car.",B:"A reliable witness identifies a person as the shooter.",C:"An officer has a "gut feeling" that someone looks suspicious.",D:"Drugs are found in plain view during a lawful traffic stop.",E:"A suspect matches a detailed description from a recent BOL (Be On the Lookout)."},ans:"ABDE"},
-  {id:"115-eng-33",year:"115",subject:"英文",num:33,type:"multi",stem:"Which of the following are types of "Physical Evidence"?",options:{A:"fingerprints found on a window",B:"a witness's verbal description of the getaway car",C:"DNA samples from a hair strand",D:"shell casings recovered from the ground",E:"surveillance camera footage of the crime scene"},ans:"ACDE"},
-  {id:"115-eng-34",year:"115",subject:"英文",num:34,type:"multi",stem:"Choose the terms related to "Court Proceedings".",options:{A:"prosecution",B:"defense",C:"verdict",D:"sentence",E:"surveillance"},ans:"ABCD"},
-  {id:"115-eng-35",year:"115",subject:"英文",num:35,type:"multi",stem:"In a medical emergency, which actions are typically performed by an EMT or Paramedic?",options:{A:"assessing vital signs",B:"performing CPR",C:"administering first aid",D:"declaring a suspect guilty",E:"stabilizing fractures"},ans:"ABCE"},
-  {id:"115-eng-36",year:"115",subject:"英文",num:36,type:"multi",stem:"Which of the following are common "Traffic Citations" or offenses?",options:{A:"failure to signal",B:"tailgating",C:"suspended license",D:"jaywalking",E:"excessive speeding"},ans:"ABCDE"},
-  {id:"115-eng-37",year:"115",subject:"英文",num:37,type:"multi",stem:"Which of the following are synonyms or related terms for "Violation" of the law?",options:{A:"breach",B:"infringement",C:"compliance",D:"offense",E:"transgression"},ans:"ABDE"},
-  {id:"115-eng-38",year:"115",subject:"英文",num:38,type:"multi",stem:"Under "Miranda Rights", which actions are required during a custodial interrogation?",options:{A:"advising the suspect of their right to remain silent",B:"warning the suspect that anything they say can be used in court",C:"providing a lawyer if the suspect cannot afford one",D:"informing the suspect that they can stop the questioning at any time",E:"forcing the suspect to sign a confession immediately"},ans:"ABCD"},
-  {id:"115-eng-39",year:"115",subject:"英文",num:39,type:"multi",stem:"Choose the terms that describe "Law Enforcement Actions".",options:{A:"apprehension",B:"detention",C:"interrogation",D:"negotiation",E:"mitigation"},ans:"ABCD"},
-  {id:"115-eng-40",year:"115",subject:"英文",num:40,type:"multi",stem:"Which of the following are key components of homeland security?",options:{A:"border security",B:"counterterrorism",C:"protection of critical infrastructure",D:"cultural integration",E:"reprimand and arrest"},ans:"ABC"}
-];
-
+let externalCsvQuestions = [];
+let customQuestions = JSON.parse(localStorage.getItem("cpu_custom_questions") || "[]");
 let allQuestions = [];
 let filteredQuestions = [];
 let currentIndex = 0;
@@ -709,14 +612,148 @@ function initPWAIcon() {
   document.getElementById("manifest-link").href = URL.createObjectURL(blob);
 }
 
-function loadQuestionBank() {
-  const custom = JSON.parse(localStorage.getItem("cpu_custom_questions") || "[]");
-  allQuestions = [...BUILTIN_QUESTIONS, ...custom];
-  const years = [...new Set(allQuestions.map(q => q.year))].sort((a,b) => b.localeCompare(a));
+// RFC-4180 標準 CSV 狀態機解析器（支援多行引言、逗號與雙引號跳脫）
+function parseCSV(text) {
+  if (!text) return [];
+  if (text.charCodeAt(0) === 0xFEFF) text = text.slice(1);
+  const rows = [];
+  let row = [];
+  let field = "";
+  let inQuotes = false;
+
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    const next = text[i + 1];
+    if (inQuotes) {
+      if (ch === '"' && next === '"') {
+        field += '"';
+        i++;
+      } else if (ch === '"') {
+        inQuotes = false;
+      } else {
+        field += ch;
+      }
+    } else {
+      if (ch === '"') {
+        inQuotes = true;
+      } else if (ch === ',') {
+        row.push(field);
+        field = "";
+      } else if (ch === '\r' && next === '\n') {
+        row.push(field);
+        rows.push(row);
+        row = [];
+        field = "";
+        i++;
+      } else if (ch === '\n' || ch === '\r') {
+        row.push(field);
+        rows.push(row);
+        row = [];
+        field = "";
+      } else {
+        field += ch;
+      }
+    }
+  }
+  if (field.length > 0 || row.length > 0) {
+    row.push(field);
+    rows.push(row);
+  }
+  if (rows.length < 2) return [];
+
+  const headers = rows[0].map(h => h.trim());
+  const result = [];
+  for (let r = 1; r < rows.length; r++) {
+    const vals = rows[r];
+    if (vals.length === 1 && vals[0].trim() === "") continue;
+    const obj = {};
+    headers.forEach((h, idx) => { obj[h] = (vals[idx] !== undefined) ? vals[idx] : ""; });
+    const num = parseInt(obj.num, 10) || r;
+    const options = {};
+    if (obj.optA && obj.optA.trim()) options.A = obj.optA.trim();
+    if (obj.optB && obj.optB.trim()) options.B = obj.optB.trim();
+    if (obj.optC && obj.optC.trim()) options.C = obj.optC.trim();
+    if (obj.optD && obj.optD.trim()) options.D = obj.optD.trim();
+    if (obj.optE && obj.optE.trim()) options.E = obj.optE.trim();
+    if (!obj.stem || Object.keys(options).length === 0) continue;
+
+    result.push({
+      id: (obj.id && obj.id.trim()) ? obj.id.trim() : `${obj.year || "115"}-${obj.subject || "未分類"}-${num}`,
+      year: (obj.year || "115").trim(),
+      subject: (obj.subject || "警察法規").trim(),
+      num: num,
+      type: (obj.type && obj.type.trim()) ? obj.type.trim() : (num <= 20 ? "single" : "multi"),
+      passage: (obj.passage || "").trim(),
+      stem: obj.stem.trim(),
+      options: options,
+      ans: (obj.ans || "A").trim()
+    });
+  }
+  return result;
+}
+
+function toCSV(questionsList) {
+  const headers = ["id", "year", "subject", "num", "type", "passage", "stem", "optA", "optB", "optC", "optD", "optE", "ans"];
+  const esc = (val) => {
+    const s = String(val ?? "");
+    if (s.includes('"') || s.includes(",") || s.includes("\n") || s.includes("\r")) {
+      return '"' + s.replace(/"/g, '""') + '"';
+    }
+    return s;
+  };
+  const lines = [headers.join(",")];
+  questionsList.forEach(q => {
+    const o = q.options || {};
+    lines.push([
+      q.id, q.year, q.subject, q.num, q.type,
+      q.passage || "", q.stem,
+      o.A || "", o.B || "", o.C || "", o.D || "", o.E || "",
+      q.ans
+    ].map(esc).join(","));
+  });
+  return "\uFEFF" + lines.join("\r\n");
+}
+
+async function initBank() {
+  try {
+    const resp = await fetch("./questions.csv?t=" + Date.now());
+    if (!resp.ok) throw new Error("HTTP " + resp.status);
+    const text = await resp.text();
+    externalCsvQuestions = parseCSV(text);
+    document.getElementById("localCsvBanner").classList.remove("show");
+  } catch (err) {
+    console.warn("無法自動讀取 ./questions.csv：", err);
+    if (customQuestions.length === 0) {
+      document.getElementById("localCsvBanner").classList.add("show");
+    }
+  }
+  rebuildQuestionBank();
+  applyFilter();
+}
+
+function rebuildQuestionBank() {
+  customQuestions = JSON.parse(localStorage.getItem("cpu_custom_questions") || "[]");
+  const map = new Map();
+  externalCsvQuestions.forEach(q => map.set(q.id, q));
+  customQuestions.forEach(q => map.set(q.id, q));
+  allQuestions = [...map.values()];
+
+  const years = [...new Set(allQuestions.map(q => q.year))].sort((a, b) => b.localeCompare(a));
   const yearSel = document.getElementById("filterYear");
-  const curVal = yearSel.value || "115";
-  yearSel.innerHTML = years.map(y => `<option value="${y}">${y} 學年度</option>`).join("") + `<option value="ALL">全部已載入年度 (${allQuestions.length}題)</option>`;
-  if ([...yearSel.options].some(o => o.value === curVal)) yearSel.value = curVal;
+  const curVal = yearSel.value;
+
+  if (years.length === 0) {
+    yearSel.innerHTML = `<option value="ALL">尚未載入 CSV 題庫</option>`;
+  } else {
+    yearSel.innerHTML = years.map(y => `<option value="${y}">${y} 學年度</option>`).join("") +
+      `<option value="ALL">全部已載入年度 (${allQuestions.length}題)</option>`;
+    if ([...yearSel.options].some(o => o.value === curVal)) yearSel.value = curVal;
+    else yearSel.value = years[0];
+  }
+
+  document.getElementById("bankStatusText").textContent = allQuestions.length > 0
+    ? `已載入總題庫：${allQuestions.length} 題`
+    : "等待載入 questions.csv";
 }
 
 function applyFilter() {
@@ -762,7 +799,9 @@ function renderQuestion() {
 
   if (!q) {
     document.getElementById("qNumberLabel").textContent = "無符合題目";
-    document.getElementById("qStem").textContent = "目前篩選條件下沒有題目（若是錯題本模式，代表目前尚無錯題紀錄）。";
+    document.getElementById("qStem").textContent = allQuestions.length === 0
+      ? "請確認 questions.csv 已與 index.html 放在同一資料夾，或點擊上方「📂 選擇 questions.csv」載入。"
+      : "目前篩選條件下沒有題目（若是錯題本模式，代表目前尚無錯題紀錄）。";
     optsEl.innerHTML = "";
     fbEl.classList.remove("show");
     passEl.style.display = "none";
@@ -946,11 +985,63 @@ function toggleTheme() {
 function openModal(id) { document.getElementById(id).classList.add("open"); }
 function closeModal(id) { document.getElementById(id).classList.remove("open"); }
 
-function downloadStandaloneHTML() {
-  const blob = new Blob([document.documentElement.outerHTML], { type: "text/html;charset=utf-8" });
+function switchImportTab(tab) {
+  document.getElementById("tabBtnCsv").classList.toggle("active", tab === "csv");
+  document.getElementById("tabBtnPdf").classList.toggle("active", tab === "pdf");
+  document.getElementById("tabPanelCsv").style.display = (tab === "csv") ? "block" : "none";
+  document.getElementById("tabPanelPdf").style.display = (tab === "pdf") ? "block" : "none";
+}
+
+function handleCsvUpload(e, isQuick) {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    const imported = parseCSV(reader.result);
+    if (!imported.length) {
+      alert("CSV 檔案格式不符或無有效題目，請確認包含表頭 id,year,subject,num,type,passage,stem,optA,optB,optC,optD,optE,ans");
+      return;
+    }
+    const existing = JSON.parse(localStorage.getItem("cpu_custom_questions") || "[]");
+    const map = new Map();
+    existing.forEach(q => map.set(q.id, q));
+    imported.forEach(q => map.set(q.id, q));
+    localStorage.setItem("cpu_custom_questions", JSON.stringify([...map.values()]));
+    document.getElementById("localCsvBanner").classList.remove("show");
+    rebuildQuestionBank();
+    applyFilter();
+    if (!isQuick) closeModal("importModal");
+    alert(`成功從 ${file.name} 載入 ${imported.length} 題！`);
+  };
+  reader.readAsText(file, "UTF-8");
+}
+
+function exportAllToCSV() {
+  if (!allQuestions.length) { alert("目前沒有可匯出的題目！"); return; }
+  const csvStr = toCSV(allQuestions);
+  const blob = new Blob([csvStr], { type: "text/csv;charset=utf-8;" });
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob);
-  a.download = "index.html";
+  a.download = "questions.csv";
+  a.click();
+}
+
+function downloadCsvTemplate() {
+  const sample = [{
+    id: "114-警察法規-1",
+    year: "114",
+    subject: "警察法規",
+    num: 1,
+    type: "single",
+    passage: "",
+    stem: "範例題目：依警察職權行使法規定，警察身分查證帶往勤務處所時間不得逾幾小時？",
+    options: { A: "1小時", B: "2小時", C: "3小時", D: "6小時" },
+    ans: "C"
+  }];
+  const blob = new Blob([toCSV(sample)], { type: "text/csv;charset=utf-8;" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "questions_template.csv";
   a.click();
 }
 
@@ -978,14 +1069,14 @@ function importProgress(e) {
     if (data.customQuestions) localStorage.setItem("cpu_custom_questions", JSON.stringify(data.customQuestions));
     wrongIds = new Set(data.wrongIds || []);
     notesMap = data.notesMap || {};
-    loadQuestionBank();
+    rebuildQuestionBank();
     applyFilter();
     alert("備份資料已成功還原！");
   };
   reader.readAsText(file);
 }
 
-function parseAndImport() {
+function parsePdfQuestions() {
   const year = document.getElementById("impYear").value.trim() || "114";
   const subject = document.getElementById("impSubject").value;
   const qText = document.getElementById("impQuestionsText").value;
@@ -1026,38 +1117,56 @@ function parseAndImport() {
       subject,
       num,
       type: num <= 20 ? "single" : "multi",
+      passage: "",
       stem,
       options,
       ans: ansMap[num] || "A"
     });
   }
+  return parsed;
+}
 
+function parsePdfAndAdd() {
+  const parsed = parsePdfQuestions();
   if (!parsed.length) {
     alert("未能辨識出題目格式，請確認包含題號（如 1.）與 (A)(B)(C)(D) 選項。");
     return;
   }
-
   const existing = JSON.parse(localStorage.getItem("cpu_custom_questions") || "[]");
-  const filteredExisting = existing.filter(x => !(x.year === year && x.subject === subject));
-  localStorage.setItem("cpu_custom_questions", JSON.stringify([...filteredExisting, ...parsed]));
-  loadQuestionBank();
-  document.getElementById("filterYear").value = year;
-  document.getElementById("filterSubject").value = subject;
+  const map = new Map();
+  existing.forEach(q => map.set(q.id, q));
+  parsed.forEach(q => map.set(q.id, q));
+  localStorage.setItem("cpu_custom_questions", JSON.stringify([...map.values()]));
+  rebuildQuestionBank();
+  document.getElementById("filterYear").value = parsed[0].year;
+  document.getElementById("filterSubject").value = parsed[0].subject;
   applyFilter();
   closeModal("importModal");
-  alert(`成功匯入 ${year} 年「${subject}」共 ${parsed.length} 題！`);
+  alert(`成功匯入 ${parsed[0].year} 年「${parsed[0].subject}」共 ${parsed.length} 題！`);
+}
+
+function parsePdfAndDownloadCsv() {
+  const parsed = parsePdfQuestions();
+  if (!parsed.length) {
+    alert("未能辨識出題目格式，請確認包含題號（如 1.）與 (A)(B)(C)(D) 選項。");
+    return;
+  }
+  const blob = new Blob([toCSV(parsed)], { type: "text/csv;charset=utf-8;" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = `${parsed[0].year}_${parsed[0].subject}.csv`;
+  a.click();
 }
 
 function clearCustomBank() {
-  if (!confirm("確定要清除所有手動匯入的自訂年度題庫嗎？（內建 115 年 160 題會保留）")) return;
+  if (!confirm("確定要清除瀏覽器內手動匯入的題目嗎？（GitHub 上的 questions.csv 題庫會保留）")) return;
   localStorage.removeItem("cpu_custom_questions");
-  loadQuestionBank();
+  rebuildQuestionBank();
   applyFilter();
 }
 
 initPWAIcon();
-loadQuestionBank();
-applyFilter();
+initBank();
 </script>
 </body>
 </html>
